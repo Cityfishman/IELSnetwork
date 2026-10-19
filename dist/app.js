@@ -1,6 +1,8 @@
 const STORE_KEY = "listenfolio-v1";
 const today = () => new Date().toISOString().slice(0, 10);
 const uid = (prefix = "id") => `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+const catalogBooks = Array.isArray(window.LISTENING_LIBRARY) ? window.LISTENING_LIBRARY : [];
+const cloneCatalog = () => JSON.parse(JSON.stringify(catalogBooks));
 
 const sampleSentences = [
   "Good morning, Westbridge Community Centre. How can I help you?",
@@ -24,9 +26,7 @@ function freshState() {
   const sectionId = "section_demo_1";
   const testId = "test_demo_1";
   const bookId = "book_demo";
-  return {
-    version: 1,
-    books: [{
+  const demoBooks = [{
       id: bookId,
       title: "我的练习册",
       note: "示例材料，可随时删除或继续添加",
@@ -35,7 +35,11 @@ function freshState() {
         title: "Test 1",
         sections: [{ id: sectionId, title: "Section 1", sentences: sampleSentences.map((text, i) => ({ id: `demo_s_${i + 1}`, text })) }]
       }]
-    }],
+    }];
+  return {
+    version: 2,
+    catalogVersion: "cambridge-1-18-v1",
+    books: catalogBooks.length ? cloneCatalog() : demoBooks,
     annotations: [],
     progress: { [testId]: { sectionId, page: 0, updatedAt: new Date().toISOString() } },
     settings: { pageSize: 8, fontScale: 1, dark: false, hideMastered: false },
@@ -53,9 +57,24 @@ let selectedText = null;
 function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORE_KEY));
-    if (saved?.version === 1 && Array.isArray(saved.books)) return saved;
+    if ([1, 2].includes(saved?.version) && Array.isArray(saved.books)) return mergeCatalog(saved);
   } catch (_) {}
   return freshState();
+}
+
+function mergeCatalog(saved) {
+  if (!catalogBooks.length) return saved;
+  const userBooks = saved.books.filter(book => book.source !== "catalog" && !/^cambridge_\d+$/.test(book.id));
+  const demoHasWork = saved.annotations?.some(a => a.bookId === "book_demo");
+  const retained = userBooks.filter(book => book.id !== "book_demo" || demoHasWork);
+  saved.books = [...cloneCatalog(), ...retained];
+  saved.version = 2;
+  saved.catalogVersion = "cambridge-1-18-v1";
+  saved.settings = { pageSize: 8, fontScale: 1, dark: false, hideMastered: false, ...(saved.settings || {}) };
+  saved.annotations ||= [];
+  saved.progress ||= {};
+  saved.activity ||= [];
+  return saved;
 }
 
 function saveState() {
