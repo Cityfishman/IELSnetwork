@@ -42,7 +42,7 @@ function freshState() {
     books: catalogBooks.length ? cloneCatalog() : demoBooks,
     annotations: [],
     progress: { [testId]: { sectionId, page: 0, updatedAt: new Date().toISOString() } },
-    settings: { pageSize: 8, fontScale: 1, dark: false, hideMastered: false },
+    settings: { fontScale: 1, dark: false, hideMastered: false },
     activity: []
   };
 }
@@ -53,6 +53,7 @@ let reader = { bookId: state.books[0]?.id, testId: state.books[0]?.tests[0]?.id,
 let review = { kind: "all", index: 0, revealed: false };
 let modal = null;
 let selectedText = null;
+let pendingSentenceId = null;
 
 function loadState() {
   try {
@@ -70,7 +71,8 @@ function mergeCatalog(saved) {
   saved.books = [...cloneCatalog(), ...retained];
   saved.version = 2;
   saved.catalogVersion = "cambridge-1-18-v1";
-  saved.settings = { pageSize: 8, fontScale: 1, dark: false, hideMastered: false, ...(saved.settings || {}) };
+  saved.settings = { fontScale: 1, dark: false, hideMastered: false, ...(saved.settings || {}) };
+  delete saved.settings.pageSize;
   saved.annotations ||= [];
   saved.progress ||= {};
   saved.activity ||= [];
@@ -159,6 +161,11 @@ function render() {
   else if (view === "settings") html = settingsView();
   else if (view === "search") html = searchView();
   document.getElementById("app").innerHTML = html;
+  if (pendingSentenceId) {
+    const targetId = pendingSentenceId;
+    pendingSentenceId = null;
+    requestAnimationFrame(() => document.querySelector(`[data-sentence-id="${targetId}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" }));
+  }
 }
 
 function dashboard() {
@@ -178,7 +185,7 @@ function dashboard() {
       ${statCard("已经掌握", mastered, state.annotations.length ? `${Math.round(mastered / state.annotations.length * 100)}% 的标注` : "还没有复习记录", state.annotations.length ? mastered / state.annotations.length * 100 : 0)}
     </section>
     <section class="grid two-col">
-      <article class="card continue-card"><div class="eyebrow">Continue reading</div><h2 class="continue-title">${esc(last.book?.title || "创建第一份材料")}</h2><p>${last.test ? `${esc(last.test.title)} · ${esc(last.section?.title || "")} · 第 ${(last.page || 0) + 1} 页` : "导入你的第一篇听力文本，开始精读。"}</p><button class="btn dark" onclick="continueReading()">继续精读 <span>→</span></button></article>
+      <article class="card continue-card"><div class="eyebrow">Continue reading</div><h2 class="continue-title">${esc(last.book?.title || "创建第一份材料")}</h2><p>${last.test ? `${esc(last.test.title)} · ${esc(last.section?.title || "")} · 完整文本` : "导入你的第一篇听力文本，开始精读。"}</p><button class="btn dark" onclick="continueReading()">继续精读 <span>→</span></button></article>
       <article class="card card-pad"><div class="eyebrow">Today</div><h2>今日复习</h2><div class="list">${due.slice(0, 3).map(a => `<div class="list-row"><div><div class="row-title">${esc(a.text)}</div><div class="row-meta">${esc(a.type)} · ${esc(annotationSource(a))}</div></div><span class="tag ${a.kind}">${a.kind === "word" ? "单词" : "句子"}</span></div>`).join("") || `<div class="empty">暂时没有待复习内容。</div>`}</div><button class="btn primary" onclick="go('review')" ${due.length ? "" : "disabled"}>开始复习 ${due.length ? `· ${due.length}` : ""}</button></article>
     </section>
     <div class="section-kicker"><h2>资料概览</h2><button class="btn ghost small" onclick="go('library')">查看全部 →</button></div>
@@ -212,10 +219,9 @@ function readerView() {
   const { book, test, section } = findContext();
   if (!section) return shell(`<div class="content"><div class="empty">资料库中还没有文本。<br><button class="btn primary" onclick="openImport()">导入文本</button></div></div>`, "精读模式", "reader-page");
   reader.bookId = book.id; reader.testId = test.id; reader.sectionId = section.id;
-  const pages = Math.max(1, Math.ceil(section.sentences.length / state.settings.pageSize));
-  reader.page = Math.max(0, Math.min(reader.page, pages - 1));
-  const start = reader.page * state.settings.pageSize;
-  const sentences = section.sentences.slice(start, start + state.settings.pageSize);
+  reader.page = 0;
+  const start = 0;
+  const sentences = section.sentences;
   const sectionAnnotations = state.annotations.filter(a => a.sectionId === section.id && (!state.settings.hideMastered || a.status !== "mastered"));
   return shell(`<div class="content">
     <div class="reader-toolbar">
@@ -227,9 +233,9 @@ function readerView() {
     <div class="reader-layout">
       <aside class="card reader-outline"><div class="outline-label">SECTIONS</div>${test.sections.map(s => `<button class="section-btn ${s.id === section.id ? "active" : ""}" onclick="switchSection('${s.id}')">${esc(s.title)}</button>`).join("")}</aside>
       <article class="reader-paper" style="--font-scale:${state.settings.fontScale}">
-        <div class="reader-head"><div><div class="eyebrow">${esc(book.title)} · ${esc(test.title)}</div><h2>${esc(section.title)}</h2></div><span class="page-indicator">PAGE ${reader.page + 1} / ${pages}</span></div>
+        <div class="reader-head"><div><div class="eyebrow">${esc(book.title)} · ${esc(test.title)}</div><h2>${esc(section.title)}</h2></div><span class="page-indicator">FULL SECTION · ${section.sentences.length} 句</span></div>
         <div class="transcript" onmouseup="handleSelection(event)">${sentences.map((s, i) => sentenceHtml(s, start + i, sectionAnnotations)).join("")}</div>
-        <div class="reader-foot"><button class="btn" onclick="pageReader(-1)" ${reader.page === 0 ? "disabled" : ""}>← 上一页</button><span class="page-indicator">${start + 1}—${Math.min(start + state.settings.pageSize, section.sentences.length)} / ${section.sentences.length} 句</span><button class="btn primary" onclick="pageReader(1)" ${reader.page >= pages - 1 ? "disabled" : ""}>下一页 →</button></div>
+        <div class="reader-foot"><span class="page-indicator">本页已完整显示 ${section.sentences.length} 句</span><button class="btn" onclick="window.scrollTo({top:0,behavior:'smooth'})">回到顶部 ↑</button></div>
       </article>
       <aside class="card annotation-panel"><div class="eyebrow">On this section</div><h3>本节标注 · ${sectionAnnotations.length}</h3>${sectionAnnotations.slice().reverse().map(a => `<div class="anno-item" onclick="editAnnotation('${a.id}')"><span class="tag ${a.kind}">${a.kind === "word" ? "单词" : "句子"}</span><q>${esc(a.text)}</q><div class="row-meta">${esc(a.type)}${a.note ? ` · ${esc(a.note)}` : ""}</div></div>`).join("") || `<div class="empty">选择单词或点击句子右侧标记按钮，开始记录问题。</div>`}</aside>
     </div>
@@ -324,7 +330,7 @@ function gradeReview(level) {
 function settingsView() {
   return shell(`<div class="content"><section class="hero"><div><div class="eyebrow">Preferences</div><h1>设置与数据</h1><p class="lede">调整阅读体验，并定期把长期积累的学习记录导出备份。</p></div></section>
     <div class="grid settings-grid">
-      <article class="card setting-card"><h2>阅读设置</h2><div class="field"><label>每页句子数量</label><select class="input" onchange="updateSetting('pageSize',Number(this.value))"><option value="6" ${state.settings.pageSize===6?'selected':''}>6 句 · 宽松</option><option value="8" ${state.settings.pageSize===8?'selected':''}>8 句 · 标准</option><option value="12" ${state.settings.pageSize===12?'selected':''}>12 句 · 紧凑</option></select></div><label style="display:flex;gap:10px;align-items:center;margin:14px 0"><input type="checkbox" ${state.settings.dark?'checked':''} onchange="updateSetting('dark',this.checked)"> 深色阅读模式</label><label style="display:flex;gap:10px;align-items:center"><input type="checkbox" ${state.settings.hideMastered?'checked':''} onchange="updateSetting('hideMastered',this.checked)"> 隐藏已掌握标注</label></article>
+      <article class="card setting-card"><h2>阅读设置</h2><div class="field"><label>Section 显示方式</label><div class="input" style="color:var(--muted)">单页完整显示全部句子</div></div><label style="display:flex;gap:10px;align-items:center;margin:14px 0"><input type="checkbox" ${state.settings.dark?'checked':''} onchange="updateSetting('dark',this.checked)"> 深色阅读模式</label><label style="display:flex;gap:10px;align-items:center"><input type="checkbox" ${state.settings.hideMastered?'checked':''} onchange="updateSetting('hideMastered',this.checked)"> 隐藏已掌握标注</label></article>
       <article class="card setting-card"><h2>备份与恢复</h2><p class="lede">数据只在当前浏览器中保存。更换设备或清理浏览器前，请先导出 JSON 备份。</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" onclick="exportData()">导出备份</button><label class="btn">导入备份<input type="file" accept="application/json" hidden onchange="importData(this.files[0])"></label></div></article>
       <article class="card setting-card"><h2>当前数据</h2><div class="list"><div class="list-row"><span>资料册</span><strong>${state.books.length}</strong></div><div class="list-row"><span>Tests</span><strong>${libraryTestsCount()}</strong></div><div class="list-row"><span>标注</span><strong>${state.annotations.length}</strong></div><div class="list-row"><span>复习记录</span><strong>${state.activity.length}</strong></div></div></article>
       <article class="card setting-card"><h2>重置示例</h2><p class="lede">清空当前浏览器内的资料和学习记录，恢复到最初的示例内容。</p><button class="btn" style="color:#a13c2a" onclick="resetData()">重置全部数据</button></article>
@@ -418,16 +424,9 @@ function continueReading() {
 function switchBook(bookId) { const book = state.books.find(b => b.id === bookId); const test = book.tests[0]; const section = test.sections[0]; reader = { bookId, testId: test.id, sectionId: section.id, page: 0 }; render(); }
 function switchTest(testId) { const book = state.books.find(b => b.id === reader.bookId); const test = book.tests.find(t => t.id === testId); reader.testId = test.id; reader.sectionId = test.sections[0].id; reader.page = 0; render(); }
 function switchSection(sectionId) { reader.sectionId = sectionId; reader.page = 0; recordProgress(); render(); }
-function pageReader(delta) {
-  const { section } = findContext();
-  const lastPage = Math.max(0, Math.ceil(section.sentences.length / state.settings.pageSize) - 1);
-  const next = Math.max(0, Math.min(lastPage, reader.page + delta));
-  if (next === reader.page) return;
-  reader.page = next; recordProgress(); window.scrollTo({ top: 0, behavior: "smooth" }); render();
-}
 function recordProgress() { state.progress[reader.testId] = { sectionId: reader.sectionId, page: reader.page, updatedAt: new Date().toISOString() }; saveState(); }
 function openReaderFor(id) { const a = state.annotations.find(x => x.id === id); jumpToSentence(a.bookId, a.testId, a.sectionId, a.sentenceId); }
-function jumpToSentence(bookId, testId, sectionId, sentenceId) { const { section } = findContext(bookId, testId, sectionId); const index = section.sentences.findIndex(s => s.id === sentenceId); reader = { bookId, testId, sectionId, page: Math.max(0, Math.floor(index / state.settings.pageSize)) }; recordProgress(); go("reader"); }
+function jumpToSentence(bookId, testId, sectionId, sentenceId) { reader = { bookId, testId, sectionId, page: 0 }; pendingSentenceId = sentenceId; recordProgress(); go("reader"); }
 function searchAll(q) { if (!q.trim()) return; window.__searchQuery = q.trim(); view = "search"; render(); }
 
 function exportData() {
@@ -442,5 +441,5 @@ function importData(file) {
 function resetData() { if (!confirm("这会清空当前浏览器中的资料、标注和复习记录。确定继续吗？")) return; state = freshState(); saveState(); view = "dashboard"; render(); toast("已恢复初始示例"); }
 
 document.addEventListener("mousedown", e => { if (!e.target.closest("#selection-menu")) closeSelectionMenu(); });
-document.addEventListener("keydown", e => { if (e.key === "Escape" && modal) closeModal(); if (!modal && view === "reader" && e.key === "ArrowRight") pageReader(1); if (!modal && view === "reader" && e.key === "ArrowLeft") pageReader(-1); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && modal) closeModal(); });
 render();
