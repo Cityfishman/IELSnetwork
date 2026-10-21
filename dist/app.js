@@ -37,7 +37,7 @@ function freshState() {
       }]
     }];
   return {
-    version: 4,
+    version: 5,
     catalogVersion: "cambridge-1-18-v1",
     books: catalogBooks.length ? cloneCatalog() : demoBooks,
     annotations: [],
@@ -60,7 +60,7 @@ let pendingSentenceId = null;
 function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORE_KEY));
-    if ([1, 2, 3, 4].includes(saved?.version) && Array.isArray(saved.books)) return mergeCatalog(saved);
+    if ([1, 2, 3, 4, 5].includes(saved?.version) && Array.isArray(saved.books)) return mergeCatalog(saved);
   } catch (_) {}
   return freshState();
 }
@@ -75,7 +75,7 @@ function mergeCatalog(saved) {
   const demoHasWork = saved.annotations?.some(a => a.bookId === "book_demo");
   const retained = userBooks.filter(book => book.id !== "book_demo" || demoHasWork);
   saved.books = [...cloneCatalog(), ...retained];
-  saved.version = 4;
+  saved.version = 5;
   saved.catalogVersion = "cambridge-1-18-v1";
   saved.settings = { fontScale: 1, dark: false, hideMastered: false, ...(saved.settings || {}) };
   delete saved.settings.pageSize;
@@ -89,21 +89,28 @@ function mergeCatalog(saved) {
 function normalizePracticeRecords(records) {
   return Object.fromEntries(Object.entries(records).map(([sectionId, record]) => {
     if (Array.isArray(record?.attempts)) {
-      const attempts = record.attempts.map((attempt, index) => ({
-        id: attempt.id || `attempt_${sectionId}_${index + 1}`,
-        date: attempt.date || today(),
-        accuracy: Math.max(0, Math.min(100, Number(attempt.accuracy || 0))),
-        createdAt: attempt.createdAt || record.updatedAt || new Date().toISOString()
-      }));
+      const attempts = record.attempts.map((attempt, index) => {
+        const total = Math.max(1, Math.round(Number(attempt.total || 10)));
+        const migratedCorrect = Math.round(Number(attempt.accuracy || 0) / 100 * total);
+        const correct = Math.max(0, Math.min(total, Math.round(Number(attempt.correct ?? migratedCorrect))));
+        return {
+          id: attempt.id || `attempt_${sectionId}_${index + 1}`,
+          date: attempt.date || today(),
+          correct,
+          total,
+          createdAt: attempt.createdAt || record.updatedAt || new Date().toISOString()
+        };
+      });
       return [sectionId, { ...record, sectionId, attempts }];
     }
     const correct = Number(record?.correct || 0);
     const wrong = Number(record?.wrong || 0);
-    const total = correct + wrong;
+    const total = correct + wrong || 10;
     const attempts = record?.completed ? [{
       id: `attempt_${sectionId}_migrated`,
       date: record.date || today(),
-      accuracy: total ? Math.round(correct / total * 100) : 0,
+      correct: Math.max(0, Math.min(total, Math.round(correct))),
+      total,
       createdAt: record.updatedAt || new Date().toISOString()
     }] : [];
     return [sectionId, { bookId: record?.bookId, testId: record?.testId, sectionId, attempts }];
@@ -341,6 +348,10 @@ function allSections() {
   return state.books.flatMap(book => book.tests.flatMap(test => test.sections.map(section => ({ book, test, section }))));
 }
 
+function attemptRate(attempt) {
+  return attempt.total ? Number(attempt.correct || 0) / Number(attempt.total) * 100 : 0;
+}
+
 function practiceView() {
   let book = state.books.find(b => b.id === practiceFilter.bookId) || state.books[0];
   let test = book?.tests.find(t => t.id === practiceFilter.testId) || book?.tests[0];
@@ -349,8 +360,10 @@ function practiceView() {
   const records = Object.values(state.practiceRecords || {});
   const completed = records.filter(record => record.attempts?.length);
   const attempts = completed.flatMap(record => record.attempts);
-  const averageAccuracy = attempts.length ? Math.round(attempts.reduce((sum, attempt) => sum + Number(attempt.accuracy || 0), 0) / attempts.length) : 0;
-  const highestAccuracy = attempts.length ? Math.max(...attempts.map(attempt => Number(attempt.accuracy || 0))) : 0;
+  const totalCorrect = attempts.reduce((sum, attempt) => sum + Number(attempt.correct || 0), 0);
+  const totalQuestions = attempts.reduce((sum, attempt) => sum + Number(attempt.total || 0), 0);
+  const overallRate = totalQuestions ? Math.round(totalCorrect / totalQuestions * 100) : 0;
+  const bestAttempt = attempts.slice().sort((a, b) => attemptRate(b) - attemptRate(a))[0];
   const totalSections = allSections().length;
   const visibleSections = (test?.sections || []).filter(section => {
     const done = !!state.practiceRecords[section.id]?.attempts?.length;
@@ -358,12 +371,12 @@ function practiceView() {
   });
   const testCompleted = (test?.sections || []).filter(section => state.practiceRecords[section.id]?.attempts?.length).length;
   return shell(`<div class="content practice-page">
-    <section class="hero"><div><div class="eyebrow">Practice tracker</div><h1>练习仪表盘</h1><p class="lede">每个 Section 可以记录多次练习。每次只需填写练习日期和正确率，数据会自动保存。</p></div></section>
+    <section class="hero"><div><div class="eyebrow">Practice tracker</div><h1>练习仪表盘</h1><p class="lede">每个 Section 可以记录多次练习。每次填写练习日期、正确数和总数；新增记录的总数默认为 10。</p></div></section>
     <section class="grid stats">
       ${statCard("已练习 Section", completed.length, `共 ${totalSections} 个 Section`, totalSections ? completed.length / totalSections * 100 : 0)}
       ${statCard("练习总次数", attempts.length, completed.length ? `分布在 ${completed.length} 个 Section` : "从第一节开始记录", Math.min(100, attempts.length))}
-      ${statCard("平均正确率", `${averageAccuracy}%`, attempts.length ? `基于 ${attempts.length} 次练习` : "尚无练习数据", averageAccuracy)}
-      ${statCard("最高正确率", `${highestAccuracy}%`, attempts.length ? "所有练习中的最高成绩" : "尚无练习数据", highestAccuracy)}
+      ${statCard("累计得分", `${totalCorrect} / ${totalQuestions}`, attempts.length ? `基于 ${attempts.length} 次练习` : "尚无练习数据", overallRate)}
+      ${statCard("最佳单次", bestAttempt ? `${bestAttempt.correct} / ${bestAttempt.total}` : "0 / 10", attempts.length ? "按答对比例计算" : "尚无练习数据", bestAttempt ? attemptRate(bestAttempt) : 0)}
     </section>
     <section class="card practice-card">
       <div class="practice-controls">
@@ -375,7 +388,7 @@ function practiceView() {
         </div>
       </div>
       <div class="test-progress"><div><strong>${esc(test?.title || "")}</strong><span>${testCompleted} / ${test?.sections.length || 0} 已练习</span></div><div class="progress"><i style="width:${test?.sections.length ? testCompleted / test.sections.length * 100 : 0}%"></i></div></div>
-      <div class="practice-table-wrap"><table class="practice-table"><thead><tr><th>Section</th><th>练习状态</th><th>历次练习</th></tr></thead><tbody>
+      <div class="practice-table-wrap"><table class="practice-table"><thead><tr><th>Section</th><th>练习状态</th><th>历次练习（正确数 / 总数）</th></tr></thead><tbody>
         ${visibleSections.map(section => practiceRow(book, test, section)).join("") || `<tr><td colspan="3"><div class="empty">当前筛选条件下没有记录。</div></td></tr>`}
       </tbody></table></div>
     </section>
@@ -386,7 +399,7 @@ function practiceRow(book, test, section) {
   const attempts = state.practiceRecords[section.id]?.attempts || [];
   const done = attempts.length > 0;
   return `<tr class="${done ? "is-done" : ""}" data-section-id="${section.id}"><td><strong>${esc(section.title)}</strong><small>${section.sentences.length} 句文本</small></td><td><span class="practice-state ${done ? "done" : "todo"}"><i></i>${done ? `已练习 ${attempts.length} 次` : "未练习"}</span></td><td><div class="attempt-list">
-    ${attempts.map((attempt, index) => `<div class="attempt-row"><span class="attempt-index">第 ${index + 1} 次</span><input type="date" name="date" class="inline-input inline-date" value="${esc(attempt.date || "")}" onchange="saveAttemptField('${section.id}','${attempt.id}','date',this.value)"><label class="accuracy-field"><input type="number" name="accuracy" class="inline-input inline-accuracy-input" min="0" max="100" step="1" value="${Number(attempt.accuracy || 0)}" onchange="saveAttemptField('${section.id}','${attempt.id}','accuracy',this.value)"><span>%</span></label><button class="attempt-delete" onclick="deletePracticeAttempt('${section.id}','${attempt.id}')" title="删除这次记录" aria-label="删除第 ${index + 1} 次练习">×</button></div>`).join("")}
+    ${attempts.map((attempt, index) => `<div class="attempt-row"><span class="attempt-index">第 ${index + 1} 次</span><input type="date" name="date" class="inline-input inline-date" value="${esc(attempt.date || "")}" onchange="saveAttemptField('${section.id}','${attempt.id}','date',this.value)"><label class="score-ratio"><input type="number" name="correct" class="inline-input inline-score-input" min="0" max="${Number(attempt.total || 10)}" step="1" value="${Number(attempt.correct || 0)}" aria-label="正确数" onchange="saveAttemptField('${section.id}','${attempt.id}','correct',this.value)"><span>/</span><input type="number" name="total" class="inline-input inline-score-input" min="1" step="1" value="${Number(attempt.total || 10)}" aria-label="总数" onchange="saveAttemptField('${section.id}','${attempt.id}','total',this.value)"></label><button class="attempt-delete" onclick="deletePracticeAttempt('${section.id}','${attempt.id}')" title="删除这次记录" aria-label="删除第 ${index + 1} 次练习">×</button></div>`).join("")}
     <button class="btn small ghost add-attempt" onclick="addPracticeAttempt('${book.id}','${test.id}','${section.id}')">＋ 新增一次</button>
   </div></td></tr>`;
 }
@@ -407,7 +420,7 @@ function addPracticeAttempt(bookId, testId, sectionId) {
   record.testId = testId;
   record.sectionId = sectionId;
   record.attempts ||= [];
-  record.attempts.push({ id: uid("attempt"), date: today(), accuracy: 0, createdAt: new Date().toISOString() });
+  record.attempts.push({ id: uid("attempt"), date: today(), correct: 0, total: 10, createdAt: new Date().toISOString() });
   state.practiceRecords[sectionId] = record;
   saveState();
   toast("已新增一次练习记录");
@@ -417,7 +430,11 @@ function addPracticeAttempt(bookId, testId, sectionId) {
 function saveAttemptField(sectionId, attemptId, field, value) {
   const attempt = state.practiceRecords[sectionId]?.attempts?.find(item => item.id === attemptId);
   if (!attempt) return;
-  if (field === "accuracy") attempt.accuracy = Math.max(0, Math.min(100, Number(value || 0)));
+  if (field === "total") {
+    attempt.total = Math.max(1, Math.round(Number(value || 10)));
+    attempt.correct = Math.min(Number(attempt.correct || 0), attempt.total);
+  }
+  if (field === "correct") attempt.correct = Math.max(0, Math.min(Number(attempt.total || 10), Math.round(Number(value || 0))));
   if (field === "date") attempt.date = value || today();
   saveState();
   toast("练习数据已自动保存");
@@ -566,7 +583,7 @@ function exportData() {
 }
 
 function importData(file) {
-  if (!file) return; const readerFile = new FileReader(); readerFile.onload = () => { try { const parsed = JSON.parse(readerFile.result); if (![1, 2, 3, 4].includes(parsed.version) || !Array.isArray(parsed.books)) throw new Error(); state = mergeCatalog(parsed); saveState(); toast("备份已恢复"); render(); } catch (_) { alert("无法识别这个备份文件。请确认它由本网站导出。"); } }; readerFile.readAsText(file);
+  if (!file) return; const readerFile = new FileReader(); readerFile.onload = () => { try { const parsed = JSON.parse(readerFile.result); if (![1, 2, 3, 4, 5].includes(parsed.version) || !Array.isArray(parsed.books)) throw new Error(); state = mergeCatalog(parsed); saveState(); toast("备份已恢复"); render(); } catch (_) { alert("无法识别这个备份文件。请确认它由本网站导出。"); } }; readerFile.readAsText(file);
 }
 
 function resetData() { if (!confirm("这会清空当前浏览器中的资料、标注、练习数据和复习记录。确定继续吗？")) return; state = freshState(); saveState(); view = "dashboard"; render(); toast("已恢复初始示例"); }

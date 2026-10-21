@@ -170,10 +170,10 @@ h3 { font-size:17px; }
 .inline-input { width:100%; min-width:92px; border:1px solid var(--line); background:var(--white); color:var(--ink); border-radius:8px; padding:8px 9px; }
 .inline-date { min-width:142px; }
 .attempt-list { display:grid; gap:8px; min-width:430px; }
-.attempt-row { display:grid; grid-template-columns:66px 150px 100px 32px; gap:8px; align-items:center; }
+.attempt-row { display:grid; grid-template-columns:66px 150px 142px 32px; gap:8px; align-items:center; }
 .attempt-index { color:var(--muted); font:500 12px var(--mono); white-space:nowrap; }
-.accuracy-field { display:flex; align-items:center; gap:5px; color:var(--muted); }
-.inline-accuracy-input { width:70px; min-width:70px; text-align:right; font:600 14px var(--mono); color:#397456; }
+.score-ratio { display:flex; align-items:center; gap:7px; color:var(--muted); }
+.inline-score-input { width:58px; min-width:58px; text-align:center; font:600 14px var(--mono); color:#397456; }
 .attempt-delete { width:30px; height:30px; border:0; border-radius:8px; background:transparent; color:var(--muted); font-size:20px; cursor:pointer; }
 .attempt-delete:hover { background:rgba(186,85,63,.1); color:#ba553f; }
 .add-attempt { justify-self:start; margin-top:2px; }
