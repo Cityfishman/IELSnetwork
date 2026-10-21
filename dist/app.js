@@ -37,10 +37,11 @@ function freshState() {
       }]
     }];
   return {
-    version: 2,
+    version: 3,
     catalogVersion: "cambridge-1-18-v1",
     books: catalogBooks.length ? cloneCatalog() : demoBooks,
     annotations: [],
+    practiceRecords: {},
     progress: { [testId]: { sectionId, page: 0, updatedAt: new Date().toISOString() } },
     settings: { fontScale: 1, dark: false, hideMastered: false },
     activity: []
@@ -51,6 +52,7 @@ let state = loadState();
 let view = "dashboard";
 let reader = { bookId: state.books[0]?.id, testId: state.books[0]?.tests[0]?.id, sectionId: state.books[0]?.tests[0]?.sections[0]?.id, page: 0 };
 let review = { kind: "all", index: 0, revealed: false };
+let practiceFilter = { bookId: state.books[0]?.id, testId: state.books[0]?.tests[0]?.id, status: "all" };
 let modal = null;
 let selectedText = null;
 let pendingSentenceId = null;
@@ -58,22 +60,27 @@ let pendingSentenceId = null;
 function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORE_KEY));
-    if ([1, 2].includes(saved?.version) && Array.isArray(saved.books)) return mergeCatalog(saved);
+    if ([1, 2, 3].includes(saved?.version) && Array.isArray(saved.books)) return mergeCatalog(saved);
   } catch (_) {}
   return freshState();
 }
 
 function mergeCatalog(saved) {
-  if (!catalogBooks.length) return saved;
+  if (!catalogBooks.length) {
+    saved.practiceRecords ||= {};
+    saved.settings ||= { fontScale: 1, dark: false, hideMastered: false };
+    return saved;
+  }
   const userBooks = saved.books.filter(book => book.source !== "catalog" && !/^cambridge_\d+$/.test(book.id));
   const demoHasWork = saved.annotations?.some(a => a.bookId === "book_demo");
   const retained = userBooks.filter(book => book.id !== "book_demo" || demoHasWork);
   saved.books = [...cloneCatalog(), ...retained];
-  saved.version = 2;
+  saved.version = 3;
   saved.catalogVersion = "cambridge-1-18-v1";
   saved.settings = { fontScale: 1, dark: false, hideMastered: false, ...(saved.settings || {}) };
   delete saved.settings.pageSize;
   saved.annotations ||= [];
+  saved.practiceRecords ||= {};
   saved.progress ||= {};
   saved.activity ||= [];
   return saved;
@@ -126,6 +133,7 @@ const navItems = [
   ["dashboard", "⌂", "学习首页"],
   ["library", "▤", "资料库"],
   ["reader", "◫", "精读模式"],
+  ["practice", "◉", "练习仪表盘"],
   ["review", "↻", "复习中心"],
   ["annotations", "✦", "标注本"],
   ["settings", "⚙", "设置"]
@@ -156,6 +164,7 @@ function render() {
   if (view === "dashboard") html = dashboard();
   else if (view === "library") html = library();
   else if (view === "reader") html = readerView();
+  else if (view === "practice") html = practiceView();
   else if (view === "review") html = reviewView();
   else if (view === "annotations") html = annotationsView();
   else if (view === "settings") html = settingsView();
@@ -304,6 +313,90 @@ function filterAnnotations(kind) {
   document.querySelectorAll(".filter").forEach(x => x.classList.remove("active")); event.currentTarget.classList.add("active");
 }
 
+function allSections() {
+  return state.books.flatMap(book => book.tests.flatMap(test => test.sections.map(section => ({ book, test, section }))));
+}
+
+function practiceView() {
+  let book = state.books.find(b => b.id === practiceFilter.bookId) || state.books[0];
+  let test = book?.tests.find(t => t.id === practiceFilter.testId) || book?.tests[0];
+  practiceFilter.bookId = book?.id;
+  practiceFilter.testId = test?.id;
+  const records = Object.values(state.practiceRecords || {});
+  const completed = records.filter(record => record.completed);
+  const correct = completed.reduce((sum, record) => sum + Number(record.correct || 0), 0);
+  const wrong = completed.reduce((sum, record) => sum + Number(record.wrong || 0), 0);
+  const answered = correct + wrong;
+  const accuracy = answered ? Math.round(correct / answered * 100) : 0;
+  const totalSections = allSections().length;
+  const visibleSections = (test?.sections || []).filter(section => {
+    const done = !!state.practiceRecords[section.id]?.completed;
+    return practiceFilter.status === "all" || (practiceFilter.status === "done" ? done : !done);
+  });
+  const testCompleted = (test?.sections || []).filter(section => state.practiceRecords[section.id]?.completed).length;
+  return shell(`<div class="content practice-page">
+    <section class="hero"><div><div class="eyebrow">Practice tracker</div><h1>练习仪表盘</h1><p class="lede">手动记录每个 Section 的完成情况、练习日期和答题结果，清楚看到剑雅听力的推进程度。</p></div><button class="btn primary" onclick="openNextPractice()">记录下一节</button></section>
+    <section class="grid stats">
+      ${statCard("已完成 Section", completed.length, `共 ${totalSections} 个 Section`, totalSections ? completed.length / totalSections * 100 : 0)}
+      ${statCard("累计正确", correct, `共作答 ${answered} 题`, accuracy)}
+      ${statCard("累计错误", wrong, answered ? `错误率 ${100 - accuracy}%` : "尚无答题数据", answered ? 100 - accuracy : 0)}
+      ${statCard("综合正确率", `${accuracy}%`, completed.length ? `${completed.length} 次练习记录` : "从第一节开始记录", accuracy)}
+    </section>
+    <section class="card practice-card">
+      <div class="practice-controls">
+        <div><div class="eyebrow">Browse records</div><h2>${esc(book?.title || "练习记录")}</h2></div>
+        <div class="control-fields">
+          <select class="input" onchange="setPracticeBook(this.value)">${state.books.map(item => `<option value="${item.id}" ${item.id === book?.id ? "selected" : ""}>${esc(item.title)}</option>`).join("")}</select>
+          <select class="input" onchange="setPracticeTest(this.value)">${(book?.tests || []).map(item => `<option value="${item.id}" ${item.id === test?.id ? "selected" : ""}>${esc(item.title)}</option>`).join("")}</select>
+          <select class="input" onchange="setPracticeStatus(this.value)"><option value="all" ${practiceFilter.status === "all" ? "selected" : ""}>全部状态</option><option value="done" ${practiceFilter.status === "done" ? "selected" : ""}>已完成</option><option value="todo" ${practiceFilter.status === "todo" ? "selected" : ""}>未完成</option></select>
+        </div>
+      </div>
+      <div class="test-progress"><div><strong>${esc(test?.title || "")}</strong><span>${testCompleted} / ${test?.sections.length || 0} 已完成</span></div><div class="progress"><i style="width:${test?.sections.length ? testCompleted / test.sections.length * 100 : 0}%"></i></div></div>
+      <div class="practice-table-wrap"><table class="practice-table"><thead><tr><th>Section</th><th>完成情况</th><th>练习日期</th><th>正确</th><th>错误</th><th>正确率</th><th></th></tr></thead><tbody>
+        ${visibleSections.map(section => practiceRow(book, test, section)).join("") || `<tr><td colspan="7"><div class="empty">当前筛选条件下没有记录。</div></td></tr>`}
+      </tbody></table></div>
+    </section>
+  </div>`, "练习仪表盘");
+}
+
+function practiceRow(book, test, section) {
+  const record = state.practiceRecords[section.id];
+  const done = !!record?.completed;
+  const correct = Number(record?.correct || 0);
+  const wrong = Number(record?.wrong || 0);
+  const total = correct + wrong;
+  const accuracy = total ? Math.round(correct / total * 100) : 0;
+  return `<tr class="${done ? "is-done" : ""}"><td><strong>${esc(section.title)}</strong><small>${section.sentences.length} 句文本</small></td><td><span class="practice-status ${done ? "done" : "todo"}"><i></i>${done ? "已完成" : "未完成"}</span></td><td>${done && record.date ? esc(formatPracticeDate(record.date)) : "—"}</td><td class="score correct">${done ? correct : "—"}</td><td class="score wrong">${done ? wrong : "—"}</td><td>${done && total ? `<strong>${accuracy}%</strong>` : "—"}</td><td><button class="btn small ${done ? "" : "primary"}" onclick="openPractice('${book.id}','${test.id}','${section.id}')">${done ? "编辑" : "记录"}</button></td></tr>`;
+}
+
+function formatPracticeDate(value) {
+  if (!value) return "—";
+  return new Date(`${value}T00:00:00`).toLocaleDateString("zh-CN", { year: "numeric", month: "short", day: "numeric" });
+}
+
+function setPracticeBook(bookId) {
+  const book = state.books.find(item => item.id === bookId);
+  practiceFilter.bookId = bookId;
+  practiceFilter.testId = book?.tests[0]?.id;
+  render();
+}
+
+function setPracticeTest(testId) { practiceFilter.testId = testId; render(); }
+function setPracticeStatus(status) { practiceFilter.status = status; render(); }
+
+function openNextPractice() {
+  const currentBook = state.books.find(item => item.id === practiceFilter.bookId);
+  const currentTest = currentBook?.tests.find(item => item.id === practiceFilter.testId);
+  const currentSections = (currentTest?.sections || []).map(section => ({ book: currentBook, test: currentTest, section }));
+  const next = currentSections.find(item => !state.practiceRecords[item.section.id]?.completed) || allSections().find(item => !state.practiceRecords[item.section.id]?.completed) || allSections()[0];
+  if (next) openPractice(next.book.id, next.test.id, next.section.id);
+}
+
+function openPractice(bookId, testId, sectionId) {
+  modal = { type: "practice", bookId, testId, sectionId };
+  render();
+}
+
 function reviewView() {
   const all = state.annotations.filter(a => review.kind === "all" || a.kind === review.kind);
   const queue = all.filter(a => a.status !== "mastered" || review.kind !== "all");
@@ -332,7 +425,7 @@ function settingsView() {
     <div class="grid settings-grid">
       <article class="card setting-card"><h2>阅读设置</h2><div class="field"><label>Section 显示方式</label><div class="input" style="color:var(--muted)">单页完整显示全部句子</div></div><label style="display:flex;gap:10px;align-items:center;margin:14px 0"><input type="checkbox" ${state.settings.dark?'checked':''} onchange="updateSetting('dark',this.checked)"> 深色阅读模式</label><label style="display:flex;gap:10px;align-items:center"><input type="checkbox" ${state.settings.hideMastered?'checked':''} onchange="updateSetting('hideMastered',this.checked)"> 隐藏已掌握标注</label></article>
       <article class="card setting-card"><h2>备份与恢复</h2><p class="lede">数据只在当前浏览器中保存。更换设备或清理浏览器前，请先导出 JSON 备份。</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" onclick="exportData()">导出备份</button><label class="btn">导入备份<input type="file" accept="application/json" hidden onchange="importData(this.files[0])"></label></div></article>
-      <article class="card setting-card"><h2>当前数据</h2><div class="list"><div class="list-row"><span>资料册</span><strong>${state.books.length}</strong></div><div class="list-row"><span>Tests</span><strong>${libraryTestsCount()}</strong></div><div class="list-row"><span>标注</span><strong>${state.annotations.length}</strong></div><div class="list-row"><span>复习记录</span><strong>${state.activity.length}</strong></div></div></article>
+      <article class="card setting-card"><h2>当前数据</h2><div class="list"><div class="list-row"><span>资料册</span><strong>${state.books.length}</strong></div><div class="list-row"><span>Tests</span><strong>${libraryTestsCount()}</strong></div><div class="list-row"><span>练习记录</span><strong>${Object.values(state.practiceRecords || {}).filter(item => item.completed).length}</strong></div><div class="list-row"><span>标注</span><strong>${state.annotations.length}</strong></div><div class="list-row"><span>复习记录</span><strong>${state.activity.length}</strong></div></div></article>
       <article class="card setting-card"><h2>重置示例</h2><p class="lede">清空当前浏览器内的资料和学习记录，恢复到最初的示例内容。</p><button class="btn" style="color:#a13c2a" onclick="resetData()">重置全部数据</button></article>
     </div>
   </div>`, "设置");
@@ -349,6 +442,7 @@ function searchView() {
 function renderModal() {
   if (modal.type === "import") return importModal();
   if (modal.type === "annotation") return annotationModal();
+  if (modal.type === "practice") return practiceModal();
   return "";
 }
 
@@ -372,6 +466,38 @@ function annotationModal() {
     ${editing ? `<div class="field"><label>掌握状态</label><select name="status" class="input"><option value="new" ${editing.status==='new'?'selected':''}>新标注</option><option value="learning" ${editing.status==='learning'?'selected':''}>学习中</option><option value="familiar" ${editing.status==='familiar'?'selected':''}>基本掌握</option><option value="mastered" ${editing.status==='mastered'?'selected':''}>已掌握</option></select></div>` : ""}
     <div class="modal-actions">${editing ? `<button type="button" class="btn" style="margin-right:auto;color:#a13c2a" onclick="deleteAnnotation('${editing.id}')">删除</button>` : ""}<button type="button" class="btn" onclick="closeModal()">取消</button><button class="btn primary">${editing ? "保存修改" : "加入标注本"}</button></div>
   </form></div></div>`;
+}
+
+function practiceModal() {
+  const { book, test, section } = findContext(modal.bookId, modal.testId, modal.sectionId);
+  const record = state.practiceRecords[section.id];
+  const completed = record ? !!record.completed : true;
+  return `<div class="modal-backdrop" onclick="backdropClose(event)"><div class="modal practice-modal"><div class="modal-head"><div><span class="tag">练习记录</span><h2 style="margin-top:10px">${esc(section.title)}</h2><p>${esc(book.title)} · ${esc(test.title)}</p></div><button class="btn icon" onclick="closeModal()">×</button></div><form onsubmit="savePractice(event)">
+    <label class="completion-toggle"><input type="checkbox" name="completed" ${completed ? "checked" : ""} onchange="togglePracticeFields(this.checked)"><span><strong>这个 Section 已经做过</strong><small>取消勾选可保存为未完成状态</small></span></label>
+    <div id="practice-fields" class="practice-form-grid ${completed ? "" : "disabled"}">
+      <div class="field"><label>练习日期</label><input type="date" name="date" class="input" value="${esc(record?.date || today())}"></div>
+      <div class="score-inputs"><div class="field"><label>做对了几个</label><input type="number" name="correct" class="input" min="0" step="1" value="${Number(record?.correct || 0)}" oninput="updatePracticePreview(this.form)"></div><div class="field"><label>做错了几个</label><input type="number" name="wrong" class="input" min="0" step="1" value="${Number(record?.wrong || 0)}" oninput="updatePracticePreview(this.form)"></div></div>
+      <div class="score-preview" id="score-preview">${practicePreview(Number(record?.correct || 0), Number(record?.wrong || 0))}</div>
+    </div>
+    <div class="modal-actions">${record ? `<button type="button" class="btn" style="margin-right:auto;color:#a13c2a" onclick="clearPractice('${section.id}')">清除记录</button>` : ""}<button type="button" class="btn" onclick="closeModal()">取消</button><button class="btn primary">保存练习数据</button></div>
+  </form></div></div>`;
+}
+
+function practicePreview(correct, wrong) {
+  const total = correct + wrong;
+  const accuracy = total ? Math.round(correct / total * 100) : 0;
+  return `<span>本次作答 <strong>${total}</strong> 题</span><span>正确率 <strong>${accuracy}%</strong></span>`;
+}
+
+function togglePracticeFields(enabled) {
+  document.getElementById("practice-fields")?.classList.toggle("disabled", !enabled);
+}
+
+function updatePracticePreview(form) {
+  const correct = Math.max(0, Number(form.elements.correct.value || 0));
+  const wrong = Math.max(0, Number(form.elements.wrong.value || 0));
+  const preview = document.getElementById("score-preview");
+  if (preview) preview.innerHTML = practicePreview(correct, wrong);
 }
 
 function openImport() { modal = { type: "import" }; render(); }
@@ -407,6 +533,29 @@ function saveAnnotation(e) {
   saveState(); modal = null; toast("标注已保存"); render();
 }
 
+function savePractice(e) {
+  e.preventDefault();
+  const form = e.target;
+  const completed = form.elements.completed.checked;
+  const correct = completed ? Math.max(0, Number(form.elements.correct.value || 0)) : 0;
+  const wrong = completed ? Math.max(0, Number(form.elements.wrong.value || 0)) : 0;
+  const date = completed ? form.elements.date.value : "";
+  if (completed && !date) return toast("请选择练习日期");
+  state.practiceRecords[modal.sectionId] = { bookId: modal.bookId, testId: modal.testId, sectionId: modal.sectionId, completed, date, correct, wrong, updatedAt: new Date().toISOString() };
+  saveState();
+  practiceFilter = { bookId: modal.bookId, testId: modal.testId, status: practiceFilter.status };
+  modal = null;
+  view = "practice";
+  toast("练习数据已保存");
+  render();
+}
+
+function clearPractice(sectionId) {
+  if (!confirm("确定清除这个 Section 的练习记录吗？")) return;
+  delete state.practiceRecords[sectionId];
+  saveState(); modal = null; toast("练习记录已清除"); render();
+}
+
 function deleteAnnotation(id) { if (!confirm("确定删除这条标注吗？")) return; state.annotations = state.annotations.filter(a => a.id !== id); saveState(); modal = null; toast("标注已删除"); render(); }
 function statusLabel(status) { return ({ new: "新标注", learning: "学习中", familiar: "基本掌握", mastered: "已掌握" })[status] || "新标注"; }
 
@@ -435,10 +584,10 @@ function exportData() {
 }
 
 function importData(file) {
-  if (!file) return; const readerFile = new FileReader(); readerFile.onload = () => { try { const parsed = JSON.parse(readerFile.result); if (parsed.version !== 1 || !Array.isArray(parsed.books)) throw new Error(); state = parsed; saveState(); toast("备份已恢复"); render(); } catch (_) { alert("无法识别这个备份文件。请确认它由本网站导出。"); } }; readerFile.readAsText(file);
+  if (!file) return; const readerFile = new FileReader(); readerFile.onload = () => { try { const parsed = JSON.parse(readerFile.result); if (![1, 2, 3].includes(parsed.version) || !Array.isArray(parsed.books)) throw new Error(); state = mergeCatalog(parsed); saveState(); toast("备份已恢复"); render(); } catch (_) { alert("无法识别这个备份文件。请确认它由本网站导出。"); } }; readerFile.readAsText(file);
 }
 
-function resetData() { if (!confirm("这会清空当前浏览器中的资料、标注和复习记录。确定继续吗？")) return; state = freshState(); saveState(); view = "dashboard"; render(); toast("已恢复初始示例"); }
+function resetData() { if (!confirm("这会清空当前浏览器中的资料、标注、练习数据和复习记录。确定继续吗？")) return; state = freshState(); saveState(); view = "dashboard"; render(); toast("已恢复初始示例"); }
 
 document.addEventListener("mousedown", e => { if (!e.target.closest("#selection-menu")) closeSelectionMenu(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && modal) closeModal(); });

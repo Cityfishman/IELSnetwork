@@ -145,6 +145,40 @@ h3 { font-size:17px; }
 .grade { padding:12px 8px; border:1px solid var(--line); border-radius:10px; background:var(--white); cursor:pointer; }
 .grade small { display:block; color:var(--muted); margin-top:4px; font-size:10px; }
 
+/* Practice dashboard */
+.practice-card { overflow:hidden; }
+.practice-controls { padding:24px 26px 20px; display:flex; align-items:flex-end; justify-content:space-between; gap:20px; border-bottom:1px solid var(--line); }
+.practice-controls h2 { margin:0; }
+.control-fields { display:flex; gap:9px; flex-wrap:wrap; justify-content:flex-end; }
+.control-fields .input { width:auto; min-width:140px; }
+.test-progress { padding:18px 26px; background:rgba(234,229,218,.44); border-bottom:1px solid var(--line); }
+.test-progress > div:first-child { display:flex; justify-content:space-between; gap:16px; font-size:13px; }
+.test-progress span { color:var(--muted); }
+.practice-table-wrap { overflow-x:auto; }
+.practice-table { width:100%; border-collapse:collapse; min-width:760px; }
+.practice-table th { padding:13px 18px; color:var(--muted); font:500 11px var(--mono); text-align:left; text-transform:uppercase; letter-spacing:.08em; background:rgba(234,229,218,.28); }
+.practice-table td { padding:17px 18px; border-top:1px solid var(--line); font-size:14px; }
+.practice-table tbody tr { transition:.16s; }
+.practice-table tbody tr:hover { background:rgba(255,255,255,.4); }
+.practice-table td:first-child strong { display:block; font-family:var(--serif); font-size:16px; }
+.practice-table td:first-child small { display:block; color:var(--muted); margin-top:4px; }
+.practice-status { display:inline-flex; align-items:center; gap:7px; white-space:nowrap; }
+.practice-status i { width:8px; height:8px; border-radius:50%; background:#aaa; }
+.practice-status.done { color:var(--forest); font-weight:600; }
+.practice-status.done i { background:#4d8a69; box-shadow:0 0 0 4px rgba(77,138,105,.12); }
+.score { font:600 16px var(--mono); }
+.score.correct { color:#397456; }
+.score.wrong { color:#ba553f; }
+.completion-toggle { display:flex; gap:13px; align-items:flex-start; padding:16px; margin-bottom:18px; border:1px solid var(--line); border-radius:12px; background:var(--white); cursor:pointer; }
+.completion-toggle input { margin-top:4px; width:17px; height:17px; accent-color:var(--forest); }
+.completion-toggle span { display:grid; gap:3px; }
+.completion-toggle small { color:var(--muted); }
+.practice-form-grid { transition:.18s; }
+.practice-form-grid.disabled { opacity:.38; }
+.score-inputs { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.score-preview { display:flex; justify-content:space-between; gap:16px; padding:14px 16px; border-radius:11px; background:var(--forest); color:#fff; font-size:13px; }
+.score-preview strong { font:600 19px var(--serif); margin-left:5px; }
+
 /* Forms / modal */
 .field { display:grid; gap:7px; margin-bottom:16px; }
 .field label { font-size:13px; font-weight:600; }
@@ -171,6 +205,8 @@ body.dark .topbar { background:rgba(22,32,28,.88); }
 body.dark .reader-paper { background:#1c2722; }
 body.dark .sentence:hover { background:#26322d; }
 body.dark .sentence.marked { background:#213238; }
+body.dark .test-progress, body.dark .practice-table th { background:rgba(255,255,255,.025); }
+body.dark .practice-table tbody tr:hover { background:rgba(255,255,255,.035); }
 
 @media (max-width:1080px) {
   .reader-layout { grid-template-columns:150px minmax(0,1fr); }
@@ -199,4 +235,8 @@ body.dark .sentence.marked { background:#213238; }
   .annotation-panel { margin-top:14px; }
   .review-actions { grid-template-columns:repeat(2,1fr); }
   .type-grid { grid-template-columns:repeat(2,1fr); }
+  .practice-controls { align-items:stretch; flex-direction:column; }
+  .control-fields { justify-content:stretch; }
+  .control-fields .input { width:100%; }
+  .score-inputs { grid-template-columns:1fr 1fr; }
 }
