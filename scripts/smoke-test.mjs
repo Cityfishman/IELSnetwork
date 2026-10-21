@@ -38,6 +38,9 @@ vm.runInContext(fs.readFileSync(new URL("../dist/app.js", import.meta.url), "utf
 if (!appElement.innerHTML.includes("学习首页")) throw new Error("Dashboard did not render");
 vm.runInContext("view = 'practice'; render();", context);
 if (!appElement.innerHTML.includes("练习仪表盘") || !appElement.innerHTML.includes("Section 1")) throw new Error("Practice dashboard did not render");
-if (!appElement.innerHTML.includes('name="completed"') || !appElement.innerHTML.includes('name="correct"') || !appElement.innerHTML.includes('name="wrong"')) throw new Error("Inline practice inputs did not render");
+if (!appElement.innerHTML.includes("新增一次")) throw new Error("Add-attempt control did not render");
+vm.runInContext("addPracticeAttempt('cambridge_1','cam1_t1','cam1_t1_sec1');", context);
+if (!appElement.innerHTML.includes('name="date"') || !appElement.innerHTML.includes('name="accuracy"') || !appElement.innerHTML.includes("第 1 次")) throw new Error("Multi-attempt practice inputs did not render");
+if (appElement.innerHTML.includes('name="correct"') || appElement.innerHTML.includes('name="wrong"')) throw new Error("Legacy correct/wrong inputs are still visible");
 if (appElement.innerHTML.includes("记录下一节") || appElement.innerHTML.includes("保存练习数据")) throw new Error("Legacy practice controls are still visible");
-console.log("Smoke test passed: dashboard and inline practice inputs rendered.");
+console.log("Smoke test passed: dashboard and multi-attempt accuracy inputs rendered.");

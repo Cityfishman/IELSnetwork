@@ -162,16 +162,21 @@ h3 { font-size:17px; }
 .practice-table tbody tr:hover { background:rgba(255,255,255,.4); }
 .practice-table td:first-child strong { display:block; font-family:var(--serif); font-size:16px; }
 .practice-table td:first-child small { display:block; color:var(--muted); margin-top:4px; }
-.inline-complete { display:inline-flex; align-items:center; gap:8px; cursor:pointer; white-space:nowrap; }
-.inline-complete input { width:17px; height:17px; accent-color:var(--forest); }
-.inline-complete.done { color:#397456; font-weight:600; }
-.inline-complete.todo { color:var(--muted); }
+.practice-state { display:inline-flex; align-items:center; gap:8px; white-space:nowrap; }
+.practice-state i { width:8px; height:8px; border-radius:50%; background:#b9b5aa; }
+.practice-state.done { color:#397456; font-weight:600; }
+.practice-state.done i { background:#4f8d67; box-shadow:0 0 0 4px rgba(79,141,103,.12); }
+.practice-state.todo { color:var(--muted); }
 .inline-input { width:100%; min-width:92px; border:1px solid var(--line); background:var(--white); color:var(--ink); border-radius:8px; padding:8px 9px; }
 .inline-date { min-width:142px; }
-.inline-score { width:76px; min-width:76px; font:600 14px var(--mono); }
-.inline-score.correct { color:#397456; }
-.inline-score.wrong { color:#ba553f; }
-.inline-accuracy { font:600 16px var(--mono); white-space:nowrap; }
+.attempt-list { display:grid; gap:8px; min-width:430px; }
+.attempt-row { display:grid; grid-template-columns:66px 150px 100px 32px; gap:8px; align-items:center; }
+.attempt-index { color:var(--muted); font:500 12px var(--mono); white-space:nowrap; }
+.accuracy-field { display:flex; align-items:center; gap:5px; color:var(--muted); }
+.inline-accuracy-input { width:70px; min-width:70px; text-align:right; font:600 14px var(--mono); color:#397456; }
+.attempt-delete { width:30px; height:30px; border:0; border-radius:8px; background:transparent; color:var(--muted); font-size:20px; cursor:pointer; }
+.attempt-delete:hover { background:rgba(186,85,63,.1); color:#ba553f; }
+.add-attempt { justify-self:start; margin-top:2px; }
 
 /* Forms / modal */
 .field { display:grid; gap:7px; margin-bottom:16px; }
