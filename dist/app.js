@@ -352,6 +352,34 @@ function attemptRate(attempt) {
   return attempt.total ? Number(attempt.correct || 0) / Number(attempt.total) * 100 : 0;
 }
 
+function practiceHeatmap(totalCompleted, totalSections) {
+  const books = state.books.filter(book => book.tests?.some(test => test.sections?.length));
+  const maxColumns = Math.max(1, ...books.map(book => book.tests.reduce((sum, test) => sum + test.sections.length, 0)));
+  const guideBook = books.slice().sort((a, b) => b.tests.length - a.tests.length)[0];
+  const guideTests = guideBook?.tests || [];
+  return `<section class="card contribution-card">
+    <div class="contribution-head"><div><div class="eyebrow">Completion map</div><h2>剑雅练习贡献图</h2><p>${totalCompleted} / ${totalSections} 个 Section 已练习，点击格子可直接查看对应记录。</p></div><div class="contribution-legend"><span>未练习</span><i class="level-0"></i><i class="level-1"></i><i class="level-2"></i><i class="level-3"></i><span>练习更多</span></div></div>
+    <div class="contribution-scroll">
+      <div class="contribution-map" style="--heat-columns:${maxColumns}">
+        <div class="contribution-axis-spacer"></div><div class="contribution-axis">${guideTests.map(test => `<span style="grid-column:span ${test.sections.length}">${esc(test.title.replace(/^Test\s*/i, "T"))}</span>`).join("")}</div>
+        ${books.map(book => {
+          const cells = book.tests.flatMap(test => test.sections.map(section => ({ test, section })));
+          const bookLabel = book.title.replace(/^剑桥雅思\s*/i, "剑雅 ");
+          return `<div class="contribution-book" title="${esc(book.title)}">${esc(bookLabel)}</div><div class="contribution-cells">${cells.map(({ test, section }) => {
+            const attempts = state.practiceRecords[section.id]?.attempts || [];
+            const level = Math.min(3, attempts.length);
+            const best = attempts.slice().sort((a, b) => attemptRate(b) - attemptRate(a))[0];
+            const detail = attempts.length ? `${attempts.length} 次练习，最佳 ${best.correct}/${best.total}` : "未练习";
+            const selected = book.id === practiceFilter.bookId && test.id === practiceFilter.testId;
+            const label = `${book.title} · ${test.title} · ${section.title}：${detail}`;
+            return `<button class="contribution-cell level-${level} ${selected ? "selected" : ""}" title="${esc(label)}" aria-label="${esc(label)}" onclick="openPracticeCell('${book.id}','${test.id}')"></button>`;
+          }).join("")}</div>`;
+        }).join("")}
+      </div>
+    </div>
+  </section>`;
+}
+
 function practiceView() {
   let book = state.books.find(b => b.id === practiceFilter.bookId) || state.books[0];
   let test = book?.tests.find(t => t.id === practiceFilter.testId) || book?.tests[0];
@@ -378,6 +406,7 @@ function practiceView() {
       ${statCard("累计得分", `${totalCorrect} / ${totalQuestions}`, attempts.length ? `基于 ${attempts.length} 次练习` : "尚无练习数据", overallRate)}
       ${statCard("最佳单次", bestAttempt ? `${bestAttempt.correct} / ${bestAttempt.total}` : "0 / 10", attempts.length ? "按答对比例计算" : "尚无练习数据", bestAttempt ? attemptRate(bestAttempt) : 0)}
     </section>
+    ${practiceHeatmap(completed.length, totalSections)}
     <section class="card practice-card">
       <div class="practice-controls">
         <div><div class="eyebrow">Browse records</div><h2>${esc(book?.title || "练习记录")}</h2></div>
@@ -413,6 +442,14 @@ function setPracticeBook(bookId) {
 
 function setPracticeTest(testId) { practiceFilter.testId = testId; render(); }
 function setPracticeStatus(status) { practiceFilter.status = status; render(); }
+
+function openPracticeCell(bookId, testId) {
+  practiceFilter.bookId = bookId;
+  practiceFilter.testId = testId;
+  practiceFilter.status = "all";
+  render();
+  requestAnimationFrame(() => document.querySelector(".practice-card")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+}
 
 function addPracticeAttempt(bookId, testId, sectionId) {
   const record = state.practiceRecords[sectionId] || { bookId, testId, sectionId, attempts: [] };

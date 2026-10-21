@@ -146,6 +146,25 @@ h3 { font-size:17px; }
 .grade small { display:block; color:var(--muted); margin-top:4px; font-size:10px; }
 
 /* Practice dashboard */
+.contribution-card { margin-bottom:18px; padding:24px 26px 26px; overflow:hidden; }
+.contribution-head { display:flex; align-items:flex-end; justify-content:space-between; gap:20px; margin-bottom:22px; }
+.contribution-head h2 { margin:0 0 5px; }
+.contribution-head p { margin:0; color:var(--muted); font-size:13px; }
+.contribution-legend { display:flex; align-items:center; gap:5px; color:var(--muted); font:500 10px var(--mono); white-space:nowrap; }
+.contribution-legend i,.contribution-cell { width:16px; height:16px; border-radius:4px; border:1px solid rgba(48,62,55,.08); }
+.contribution-scroll { overflow-x:auto; padding-bottom:4px; }
+.contribution-map { display:grid; grid-template-columns:74px max-content; gap:5px 12px; width:max-content; min-width:100%; align-items:center; }
+.contribution-axis-spacer { height:18px; }
+.contribution-axis,.contribution-cells { display:grid; grid-template-columns:repeat(var(--heat-columns),16px); gap:5px; }
+.contribution-axis span { text-align:center; color:var(--muted); font:500 9px var(--mono); overflow:hidden; white-space:nowrap; }
+.contribution-book { color:var(--muted); font:500 11px var(--mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.contribution-cell { display:block; padding:0; cursor:pointer; transition:transform .12s,box-shadow .12s; }
+.contribution-cell:hover { transform:scale(1.22); box-shadow:0 3px 10px rgba(31,74,56,.2); position:relative; z-index:2; }
+.contribution-cell.selected { outline:2px solid var(--ink); outline-offset:2px; }
+.level-0 { background:#e7e3da; }
+.level-1 { background:#a9d4b7; }
+.level-2 { background:#5e9d75; }
+.level-3 { background:#245f43; }
 .practice-card { overflow:hidden; }
 .practice-controls { padding:24px 26px 20px; display:flex; align-items:flex-end; justify-content:space-between; gap:20px; border-bottom:1px solid var(--line); }
 .practice-controls h2 { margin:0; }
@@ -206,6 +225,10 @@ body.dark .sentence:hover { background:#26322d; }
 body.dark .sentence.marked { background:#213238; }
 body.dark .test-progress, body.dark .practice-table th { background:rgba(255,255,255,.025); }
 body.dark .practice-table tbody tr:hover { background:rgba(255,255,255,.035); }
+body.dark .level-0 { background:#34413b; }
+body.dark .level-1 { background:#49755b; }
+body.dark .level-2 { background:#4f986b; }
+body.dark .level-3 { background:#78bd8c; }
 
 @media (max-width:1080px) {
   .reader-layout { grid-template-columns:150px minmax(0,1fr); }
@@ -223,6 +246,8 @@ body.dark .practice-table tbody tr:hover { background:rgba(255,255,255,.035); }
   .content { padding:28px 18px 60px; }
   .hero { align-items:start; }
   .date-stamp { display:none; }
+  .contribution-card { padding:20px 18px; }
+  .contribution-head { align-items:flex-start; flex-direction:column; }
   .stats,.two-col,.library-grid,.settings-grid,.review-layout { grid-template-columns:1fr; }
   .reader-layout { display:block; }
   .reader-outline { position:static; margin-bottom:12px; display:flex; overflow:auto; gap:5px; }
