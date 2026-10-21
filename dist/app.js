@@ -335,7 +335,7 @@ function practiceView() {
   });
   const testCompleted = (test?.sections || []).filter(section => state.practiceRecords[section.id]?.completed).length;
   return shell(`<div class="content practice-page">
-    <section class="hero"><div><div class="eyebrow">Practice tracker</div><h1>练习仪表盘</h1><p class="lede">手动记录每个 Section 的完成情况、练习日期和答题结果，清楚看到剑雅听力的推进程度。</p></div><button class="btn primary" onclick="openNextPractice()">记录下一节</button></section>
+    <section class="hero"><div><div class="eyebrow">Practice tracker</div><h1>练习仪表盘</h1><p class="lede">直接在每个 Section 行内勾选完成、选择日期并填写正确与错误数量，数据会自动保存。</p></div></section>
     <section class="grid stats">
       ${statCard("已完成 Section", completed.length, `共 ${totalSections} 个 Section`, totalSections ? completed.length / totalSections * 100 : 0)}
       ${statCard("累计正确", correct, `共作答 ${answered} 题`, accuracy)}
@@ -352,8 +352,8 @@ function practiceView() {
         </div>
       </div>
       <div class="test-progress"><div><strong>${esc(test?.title || "")}</strong><span>${testCompleted} / ${test?.sections.length || 0} 已完成</span></div><div class="progress"><i style="width:${test?.sections.length ? testCompleted / test.sections.length * 100 : 0}%"></i></div></div>
-      <div class="practice-table-wrap"><table class="practice-table"><thead><tr><th>Section</th><th>完成情况</th><th>练习日期</th><th>正确</th><th>错误</th><th>正确率</th><th></th></tr></thead><tbody>
-        ${visibleSections.map(section => practiceRow(book, test, section)).join("") || `<tr><td colspan="7"><div class="empty">当前筛选条件下没有记录。</div></td></tr>`}
+      <div class="practice-table-wrap"><table class="practice-table"><thead><tr><th>Section</th><th>完成情况</th><th>练习日期</th><th>正确</th><th>错误</th><th>正确率</th></tr></thead><tbody>
+        ${visibleSections.map(section => practiceRow(book, test, section)).join("") || `<tr><td colspan="6"><div class="empty">当前筛选条件下没有记录。</div></td></tr>`}
       </tbody></table></div>
     </section>
   </div>`, "练习仪表盘");
@@ -366,12 +366,7 @@ function practiceRow(book, test, section) {
   const wrong = Number(record?.wrong || 0);
   const total = correct + wrong;
   const accuracy = total ? Math.round(correct / total * 100) : 0;
-  return `<tr class="${done ? "is-done" : ""}"><td><strong>${esc(section.title)}</strong><small>${section.sentences.length} 句文本</small></td><td><span class="practice-status ${done ? "done" : "todo"}"><i></i>${done ? "已完成" : "未完成"}</span></td><td>${done && record.date ? esc(formatPracticeDate(record.date)) : "—"}</td><td class="score correct">${done ? correct : "—"}</td><td class="score wrong">${done ? wrong : "—"}</td><td>${done && total ? `<strong>${accuracy}%</strong>` : "—"}</td><td><button class="btn small ${done ? "" : "primary"}" onclick="openPractice('${book.id}','${test.id}','${section.id}')">${done ? "编辑" : "记录"}</button></td></tr>`;
-}
-
-function formatPracticeDate(value) {
-  if (!value) return "—";
-  return new Date(`${value}T00:00:00`).toLocaleDateString("zh-CN", { year: "numeric", month: "short", day: "numeric" });
+  return `<tr class="${done ? "is-done" : ""}" data-section-id="${section.id}"><td><strong>${esc(section.title)}</strong><small>${section.sentences.length} 句文本</small></td><td><label class="inline-complete ${done ? "done" : "todo"}"><input type="checkbox" name="completed" ${done ? "checked" : ""} onchange="saveInlinePractice('${book.id}','${test.id}','${section.id}',this,'completed')"><span>${done ? "已完成" : "未完成"}</span></label></td><td><input type="date" name="date" class="inline-input inline-date" value="${esc(record?.date || "")}" onchange="saveInlinePractice('${book.id}','${test.id}','${section.id}',this,'date')"></td><td><input type="number" name="correct" class="inline-input inline-score correct" min="0" step="1" value="${correct}" oninput="updateInlineAccuracy(this)" onchange="saveInlinePractice('${book.id}','${test.id}','${section.id}',this,'score')"></td><td><input type="number" name="wrong" class="inline-input inline-score wrong" min="0" step="1" value="${wrong}" oninput="updateInlineAccuracy(this)" onchange="saveInlinePractice('${book.id}','${test.id}','${section.id}',this,'score')"></td><td><strong class="inline-accuracy">${total ? `${accuracy}%` : "—"}</strong></td></tr>`;
 }
 
 function setPracticeBook(bookId) {
@@ -384,16 +379,32 @@ function setPracticeBook(bookId) {
 function setPracticeTest(testId) { practiceFilter.testId = testId; render(); }
 function setPracticeStatus(status) { practiceFilter.status = status; render(); }
 
-function openNextPractice() {
-  const currentBook = state.books.find(item => item.id === practiceFilter.bookId);
-  const currentTest = currentBook?.tests.find(item => item.id === practiceFilter.testId);
-  const currentSections = (currentTest?.sections || []).map(section => ({ book: currentBook, test: currentTest, section }));
-  const next = currentSections.find(item => !state.practiceRecords[item.section.id]?.completed) || allSections().find(item => !state.practiceRecords[item.section.id]?.completed) || allSections()[0];
-  if (next) openPractice(next.book.id, next.test.id, next.section.id);
+function updateInlineAccuracy(source) {
+  const row = source.closest("tr");
+  const correct = Math.max(0, Number(row.querySelector('[name="correct"]').value || 0));
+  const wrong = Math.max(0, Number(row.querySelector('[name="wrong"]').value || 0));
+  const total = correct + wrong;
+  row.querySelector(".inline-accuracy").textContent = total ? `${Math.round(correct / total * 100)}%` : "—";
 }
 
-function openPractice(bookId, testId, sectionId) {
-  modal = { type: "practice", bookId, testId, sectionId };
+function saveInlinePractice(bookId, testId, sectionId, source, field) {
+  const row = source.closest("tr");
+  const completedInput = row.querySelector('[name="completed"]');
+  const dateInput = row.querySelector('[name="date"]');
+  if (field !== "completed") completedInput.checked = true;
+  if (completedInput.checked && !dateInput.value) dateInput.value = today();
+  state.practiceRecords[sectionId] = {
+    bookId,
+    testId,
+    sectionId,
+    completed: completedInput.checked,
+    date: dateInput.value,
+    correct: Math.max(0, Number(row.querySelector('[name="correct"]').value || 0)),
+    wrong: Math.max(0, Number(row.querySelector('[name="wrong"]').value || 0)),
+    updatedAt: new Date().toISOString()
+  };
+  saveState();
+  toast("练习数据已自动保存");
   render();
 }
 
@@ -442,7 +453,6 @@ function searchView() {
 function renderModal() {
   if (modal.type === "import") return importModal();
   if (modal.type === "annotation") return annotationModal();
-  if (modal.type === "practice") return practiceModal();
   return "";
 }
 
@@ -466,38 +476,6 @@ function annotationModal() {
     ${editing ? `<div class="field"><label>掌握状态</label><select name="status" class="input"><option value="new" ${editing.status==='new'?'selected':''}>新标注</option><option value="learning" ${editing.status==='learning'?'selected':''}>学习中</option><option value="familiar" ${editing.status==='familiar'?'selected':''}>基本掌握</option><option value="mastered" ${editing.status==='mastered'?'selected':''}>已掌握</option></select></div>` : ""}
     <div class="modal-actions">${editing ? `<button type="button" class="btn" style="margin-right:auto;color:#a13c2a" onclick="deleteAnnotation('${editing.id}')">删除</button>` : ""}<button type="button" class="btn" onclick="closeModal()">取消</button><button class="btn primary">${editing ? "保存修改" : "加入标注本"}</button></div>
   </form></div></div>`;
-}
-
-function practiceModal() {
-  const { book, test, section } = findContext(modal.bookId, modal.testId, modal.sectionId);
-  const record = state.practiceRecords[section.id];
-  const completed = record ? !!record.completed : true;
-  return `<div class="modal-backdrop" onclick="backdropClose(event)"><div class="modal practice-modal"><div class="modal-head"><div><span class="tag">练习记录</span><h2 style="margin-top:10px">${esc(section.title)}</h2><p>${esc(book.title)} · ${esc(test.title)}</p></div><button class="btn icon" onclick="closeModal()">×</button></div><form onsubmit="savePractice(event)">
-    <label class="completion-toggle"><input type="checkbox" name="completed" ${completed ? "checked" : ""} onchange="togglePracticeFields(this.checked)"><span><strong>这个 Section 已经做过</strong><small>取消勾选可保存为未完成状态</small></span></label>
-    <div id="practice-fields" class="practice-form-grid ${completed ? "" : "disabled"}">
-      <div class="field"><label>练习日期</label><input type="date" name="date" class="input" value="${esc(record?.date || today())}"></div>
-      <div class="score-inputs"><div class="field"><label>做对了几个</label><input type="number" name="correct" class="input" min="0" step="1" value="${Number(record?.correct || 0)}" oninput="updatePracticePreview(this.form)"></div><div class="field"><label>做错了几个</label><input type="number" name="wrong" class="input" min="0" step="1" value="${Number(record?.wrong || 0)}" oninput="updatePracticePreview(this.form)"></div></div>
-      <div class="score-preview" id="score-preview">${practicePreview(Number(record?.correct || 0), Number(record?.wrong || 0))}</div>
-    </div>
-    <div class="modal-actions">${record ? `<button type="button" class="btn" style="margin-right:auto;color:#a13c2a" onclick="clearPractice('${section.id}')">清除记录</button>` : ""}<button type="button" class="btn" onclick="closeModal()">取消</button><button class="btn primary">保存练习数据</button></div>
-  </form></div></div>`;
-}
-
-function practicePreview(correct, wrong) {
-  const total = correct + wrong;
-  const accuracy = total ? Math.round(correct / total * 100) : 0;
-  return `<span>本次作答 <strong>${total}</strong> 题</span><span>正确率 <strong>${accuracy}%</strong></span>`;
-}
-
-function togglePracticeFields(enabled) {
-  document.getElementById("practice-fields")?.classList.toggle("disabled", !enabled);
-}
-
-function updatePracticePreview(form) {
-  const correct = Math.max(0, Number(form.elements.correct.value || 0));
-  const wrong = Math.max(0, Number(form.elements.wrong.value || 0));
-  const preview = document.getElementById("score-preview");
-  if (preview) preview.innerHTML = practicePreview(correct, wrong);
 }
 
 function openImport() { modal = { type: "import" }; render(); }
@@ -531,29 +509,6 @@ function saveAnnotation(e) {
     state.annotations.push({ id: uid("anno"), kind: modal.kind, text: modal.text, sentenceId: modal.sentenceId, bookId: book.id, testId: test.id, sectionId: section.id, type: data.get("annoType"), note: data.get("note").trim(), status: "new", nextReview: today(), reviewCount: 0, createdAt: new Date().toISOString() });
   }
   saveState(); modal = null; toast("标注已保存"); render();
-}
-
-function savePractice(e) {
-  e.preventDefault();
-  const form = e.target;
-  const completed = form.elements.completed.checked;
-  const correct = completed ? Math.max(0, Number(form.elements.correct.value || 0)) : 0;
-  const wrong = completed ? Math.max(0, Number(form.elements.wrong.value || 0)) : 0;
-  const date = completed ? form.elements.date.value : "";
-  if (completed && !date) return toast("请选择练习日期");
-  state.practiceRecords[modal.sectionId] = { bookId: modal.bookId, testId: modal.testId, sectionId: modal.sectionId, completed, date, correct, wrong, updatedAt: new Date().toISOString() };
-  saveState();
-  practiceFilter = { bookId: modal.bookId, testId: modal.testId, status: practiceFilter.status };
-  modal = null;
-  view = "practice";
-  toast("练习数据已保存");
-  render();
-}
-
-function clearPractice(sectionId) {
-  if (!confirm("确定清除这个 Section 的练习记录吗？")) return;
-  delete state.practiceRecords[sectionId];
-  saveState(); modal = null; toast("练习记录已清除"); render();
 }
 
 function deleteAnnotation(id) { if (!confirm("确定删除这条标注吗？")) return; state.annotations = state.annotations.filter(a => a.id !== id); saveState(); modal = null; toast("标注已删除"); render(); }

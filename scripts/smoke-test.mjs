@@ -38,6 +38,6 @@ vm.runInContext(fs.readFileSync(new URL("../dist/app.js", import.meta.url), "utf
 if (!appElement.innerHTML.includes("学习首页")) throw new Error("Dashboard did not render");
 vm.runInContext("view = 'practice'; render();", context);
 if (!appElement.innerHTML.includes("练习仪表盘") || !appElement.innerHTML.includes("Section 1")) throw new Error("Practice dashboard did not render");
-vm.runInContext("openPractice('cambridge_1', 'cam1_t1', 'cam1_t1_sec1');", context);
-if (!appElement.innerHTML.includes("保存练习数据") || !appElement.innerHTML.includes("做对了几个")) throw new Error("Practice form did not render");
-console.log("Smoke test passed: dashboard, practice tracker, and practice form rendered.");
+if (!appElement.innerHTML.includes('name="completed"') || !appElement.innerHTML.includes('name="correct"') || !appElement.innerHTML.includes('name="wrong"')) throw new Error("Inline practice inputs did not render");
+if (appElement.innerHTML.includes("记录下一节") || appElement.innerHTML.includes("保存练习数据")) throw new Error("Legacy practice controls are still visible");
+console.log("Smoke test passed: dashboard and inline practice inputs rendered.");

@@ -162,22 +162,16 @@ h3 { font-size:17px; }
 .practice-table tbody tr:hover { background:rgba(255,255,255,.4); }
 .practice-table td:first-child strong { display:block; font-family:var(--serif); font-size:16px; }
 .practice-table td:first-child small { display:block; color:var(--muted); margin-top:4px; }
-.practice-status { display:inline-flex; align-items:center; gap:7px; white-space:nowrap; }
-.practice-status i { width:8px; height:8px; border-radius:50%; background:#aaa; }
-.practice-status.done { color:var(--forest); font-weight:600; }
-.practice-status.done i { background:#4d8a69; box-shadow:0 0 0 4px rgba(77,138,105,.12); }
-.score { font:600 16px var(--mono); }
-.score.correct { color:#397456; }
-.score.wrong { color:#ba553f; }
-.completion-toggle { display:flex; gap:13px; align-items:flex-start; padding:16px; margin-bottom:18px; border:1px solid var(--line); border-radius:12px; background:var(--white); cursor:pointer; }
-.completion-toggle input { margin-top:4px; width:17px; height:17px; accent-color:var(--forest); }
-.completion-toggle span { display:grid; gap:3px; }
-.completion-toggle small { color:var(--muted); }
-.practice-form-grid { transition:.18s; }
-.practice-form-grid.disabled { opacity:.38; }
-.score-inputs { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-.score-preview { display:flex; justify-content:space-between; gap:16px; padding:14px 16px; border-radius:11px; background:var(--forest); color:#fff; font-size:13px; }
-.score-preview strong { font:600 19px var(--serif); margin-left:5px; }
+.inline-complete { display:inline-flex; align-items:center; gap:8px; cursor:pointer; white-space:nowrap; }
+.inline-complete input { width:17px; height:17px; accent-color:var(--forest); }
+.inline-complete.done { color:#397456; font-weight:600; }
+.inline-complete.todo { color:var(--muted); }
+.inline-input { width:100%; min-width:92px; border:1px solid var(--line); background:var(--white); color:var(--ink); border-radius:8px; padding:8px 9px; }
+.inline-date { min-width:142px; }
+.inline-score { width:76px; min-width:76px; font:600 14px var(--mono); }
+.inline-score.correct { color:#397456; }
+.inline-score.wrong { color:#ba553f; }
+.inline-accuracy { font:600 16px var(--mono); white-space:nowrap; }
 
 /* Forms / modal */
 .field { display:grid; gap:7px; margin-bottom:16px; }
@@ -238,5 +232,4 @@ body.dark .practice-table tbody tr:hover { background:rgba(255,255,255,.035); }
   .practice-controls { align-items:stretch; flex-direction:column; }
   .control-fields { justify-content:stretch; }
   .control-fields .input { width:100%; }
-  .score-inputs { grid-template-columns:1fr 1fr; }
 }
