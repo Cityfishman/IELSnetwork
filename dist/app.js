@@ -125,7 +125,8 @@ function normalizePracticeRecords(records) {
 
 function saveState(options = {}) {
   localStorage.setItem(STORE_KEY, JSON.stringify(state));
-  if (!options.skipSync && syncClient?.isConfigured()) {
+  const hasSyncTarget = syncClient?.hasRepositoryConfig?.() || syncClient?.isConfigured();
+  if (!options.skipSync && hasSyncTarget) {
     syncDirty = true;
     localStorage.setItem(SYNC_DIRTY_KEY, "1");
     scheduleCloudSave();
@@ -237,7 +238,14 @@ async function configureSync(event) {
   event.preventDefault();
   const data = new FormData(event.target);
   try {
-    syncClient.configure(data.get("endpoint"), data.get("syncKey"));
+    syncClient.configure({
+      owner: data.get("owner"),
+      repo: data.get("repo"),
+      branch: data.get("branch"),
+      path: data.get("path"),
+      token: data.get("token"),
+      rememberToken: data.get("rememberToken") === "on"
+    });
     await initializeCloudSync(true);
     render();
   } catch (error) {
@@ -257,7 +265,7 @@ function disconnectSync() {
 }
 
 function syncStatusInfo() {
-  return syncClient?.getStatus() || { kind: "off", message: "未配置云同步", updatedAt: null };
+  return syncClient?.getStatus() || { kind: "off", message: "未配置 GitHub 同步", updatedAt: null };
 }
 
 function syncFooter() {
@@ -658,12 +666,12 @@ function gradeReview(level) {
 }
 
 function settingsView() {
-  const syncConfig = syncClient?.getConfig() || { endpoint: "", hasKey: false };
+  const syncConfig = syncClient?.getConfig() || { owner: "", repo: "", branch: "main", path: "data/listenfolio-state.json", hasToken: false, rememberToken: false };
   const syncStatus = syncStatusInfo();
   const syncTime = syncStatus.updatedAt ? new Date(syncStatus.updatedAt).toLocaleString("zh-CN") : "尚未同步";
   return shell(`<div class="content"><section class="hero"><div><div class="eyebrow">Preferences</div><h1>设置与数据</h1><p class="lede">调整阅读体验，并定期把长期积累的学习记录导出备份。</p></div></section>
     <div class="grid settings-grid">
-      <article class="card setting-card sync-card"><div class="setting-title-row"><h2>私有仓库同步</h2><span class="sync-pill ${esc(syncStatus.kind)}"><i class="sync-dot ${esc(syncStatus.kind)}"></i><span data-sync-status>${esc(syncStatus.message)}</span></span></div><p class="lede">无需账户登录。通过同步密钥连接 Worker，数据由 Worker 写入你的 GitHub 私有仓库。</p><form onsubmit="configureSync(event)"><div class="field"><label>Worker 地址</label><input name="endpoint" type="url" class="input" required value="${esc(syncConfig.endpoint)}" placeholder="https://listenfolio-sync.example.workers.dev"></div><div class="field"><label>同步密钥</label><input name="syncKey" type="password" class="input" ${syncConfig.hasKey ? "" : "required"} placeholder="${syncConfig.hasKey ? "已保存；留空表示不修改" : "至少 12 个字符"}" autocomplete="off"></div><div class="sync-meta">最近同步：${esc(syncTime)}</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary">${syncConfig.hasKey ? "更新连接" : "连接并同步"}</button>${syncConfig.hasKey ? `<button type="button" class="btn" onclick="pushCloudState()">立即上传</button><button type="button" class="btn" onclick="loadCloudState()">加载云端</button><button type="button" class="btn danger-text" onclick="disconnectSync()">断开本机</button>` : ""}</div></form></article>
+      <article class="card setting-card sync-card"><div class="setting-title-row"><h2>GitHub 私有仓库同步</h2><span class="sync-pill ${esc(syncStatus.kind)}"><i class="sync-dot ${esc(syncStatus.kind)}"></i><span data-sync-status>${esc(syncStatus.message)}</span></span></div><p class="lede">网页直接调用 GitHub API，无需额外服务器。请使用仅授权数据仓库、Contents 可读写的 fine-grained Token。</p><form onsubmit="configureSync(event)"><div class="sync-form-grid"><div class="field"><label>仓库所有者</label><input name="owner" class="input" required value="${esc(syncConfig.owner)}" placeholder="例如 Cityfishman" autocomplete="username"></div><div class="field"><label>私有仓库名称</label><input name="repo" class="input" required value="${esc(syncConfig.repo)}" placeholder="例如 IELSnetwork-data"></div><div class="field"><label>分支</label><input name="branch" class="input" required value="${esc(syncConfig.branch)}" placeholder="main"></div><div class="field"><label>数据文件路径</label><input name="path" class="input" required value="${esc(syncConfig.path)}" placeholder="data/listenfolio-state.json"></div></div><div class="field"><label>GitHub fine-grained Token</label><input name="token" type="password" class="input" ${syncConfig.hasToken ? "" : "required"} placeholder="${syncConfig.hasToken ? "已保存；留空表示不修改" : "github_pat_…"}" autocomplete="off"></div><label class="remember-token"><input name="rememberToken" type="checkbox" ${syncConfig.rememberToken ? "checked" : ""}> 信任此设备并持久保存 Token</label><p class="sync-security-note">不勾选时，Token 只保留到本次浏览器会话结束。请勿把 Token 写入仓库或分享给他人。</p><div class="sync-meta">最近同步：${esc(syncTime)}</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary">${syncConfig.hasToken ? "更新连接" : "连接并同步"}</button>${syncConfig.hasToken ? `<button type="button" class="btn" onclick="pushCloudState()">立即上传</button><button type="button" class="btn" onclick="loadCloudState()">加载云端</button><button type="button" class="btn danger-text" onclick="disconnectSync()">断开本机</button>` : ""}</div></form></article>
       <article class="card setting-card"><h2>阅读设置</h2><div class="field"><label>Section 显示方式</label><div class="input" style="color:var(--muted)">单页完整显示全部句子</div></div><label style="display:flex;gap:10px;align-items:center;margin:14px 0"><input type="checkbox" ${state.settings.dark?'checked':''} onchange="updateSetting('dark',this.checked)"> 深色阅读模式</label><label style="display:flex;gap:10px;align-items:center"><input type="checkbox" ${state.settings.hideMastered?'checked':''} onchange="updateSetting('hideMastered',this.checked)"> 隐藏已掌握标注</label></article>
       <article class="card setting-card"><h2>备份与恢复</h2><p class="lede">本地缓存可在断网时继续使用；JSON 备份可用于额外归档或手动迁移。</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" onclick="exportData()">导出备份</button><label class="btn">导入备份<input type="file" accept="application/json" hidden onchange="importData(this.files[0])"></label></div></article>
       <article class="card setting-card"><h2>当前数据</h2><div class="list"><div class="list-row"><span>资料册</span><strong>${state.books.length}</strong></div><div class="list-row"><span>Tests</span><strong>${libraryTestsCount()}</strong></div><div class="list-row"><span>练习次数</span><strong>${Object.values(state.practiceRecords || {}).reduce((sum, item) => sum + (item.attempts?.length || 0), 0)}</strong></div><div class="list-row"><span>标注</span><strong>${state.annotations.length}</strong></div><div class="list-row"><span>复习记录</span><strong>${state.activity.length}</strong></div></div></article>
