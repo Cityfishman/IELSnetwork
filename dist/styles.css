@@ -36,6 +36,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .nav-btn:hover,.nav-btn.active { color:#fff; background:rgba(255,255,255,.11); }
 .nav-icon { width:22px; font-size:17px; text-align:center; }
 .side-foot { margin-top:auto; padding:16px 14px 2px; border-top:1px solid rgba(255,255,255,.14); color:rgba(255,255,255,.58); font-size:12px; line-height:1.6; }
+.sync-line { display:inline-flex; align-items:center; gap:7px; }
+.sync-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#89928e; flex:0 0 auto; }
+.sync-dot.syncing { background:#e9b949; animation:sync-pulse 1s ease-in-out infinite; }
+.sync-dot.synced { background:#72c28b; }
+.sync-dot.conflict,.sync-dot.error { background:#e27762; }
+@keyframes sync-pulse { 50% { opacity:.35; transform:scale(.82); } }
 .main { min-width:0; }
 .topbar { min-height:74px; display:flex; align-items:center; justify-content:space-between; padding:0 42px; border-bottom:1px solid var(--line); background:rgba(243,240,232,.88); backdrop-filter:blur(14px); position:sticky; top:0; z-index:15; }
 .crumb { color:var(--muted); font-size:14px; }
@@ -214,6 +220,12 @@ textarea.input { min-height:120px; resize:vertical; line-height:1.6; }
 .type-option input:checked + span { color:#fff; background:var(--forest); border-color:var(--forest); }
 .settings-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
 .setting-card { padding:24px; }
+.sync-card { grid-column:1 / -1; }
+.setting-title-row { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.setting-title-row h2 { margin:0; }
+.sync-pill { display:inline-flex; align-items:center; gap:7px; padding:6px 9px; border:1px solid var(--line); border-radius:999px; color:var(--muted); font-size:12px; white-space:nowrap; }
+.sync-meta { color:var(--muted); font-size:12px; margin:-4px 0 14px; }
+.danger-text { color:#a13c2a; }
 .toast { position:fixed; z-index:200; right:24px; bottom:24px; transform:translateY(25px); opacity:0; background:var(--forest-2); color:#fff; border-radius:10px; padding:12px 16px; transition:.2s; pointer-events:none; }
 .toast.show { transform:none; opacity:1; }
 .mobile-menu { display:none; }

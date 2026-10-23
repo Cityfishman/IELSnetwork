@@ -56,6 +56,12 @@ let practiceFilter = { bookId: state.books[0]?.id, testId: state.books[0]?.tests
 let modal = null;
 let selectedText = null;
 let pendingSentenceId = null;
+const syncClient = window.ListenfolioSync || null;
+const SYNC_DIRTY_KEY = "listenfolio-sync-dirty-v1";
+let syncPushTimer = null;
+let syncReady = false;
+let syncDirty = localStorage.getItem(SYNC_DIRTY_KEY) === "1";
+let lastFocusSyncAt = 0;
 
 function loadState() {
   try {
@@ -117,8 +123,147 @@ function normalizePracticeRecords(records) {
   }));
 }
 
-function saveState() {
+function saveState(options = {}) {
   localStorage.setItem(STORE_KEY, JSON.stringify(state));
+  if (!options.skipSync && syncClient?.isConfigured()) {
+    syncDirty = true;
+    localStorage.setItem(SYNC_DIRTY_KEY, "1");
+    scheduleCloudSave();
+  }
+}
+
+function syncedStateSnapshot() {
+  const personalBooks = state.books.filter(book => book.source !== "catalog" && !/^cambridge_\d+$/.test(book.id));
+  return {
+    version: 5,
+    catalogVersion: "cambridge-1-18-v1",
+    books: JSON.parse(JSON.stringify(personalBooks)),
+    annotations: JSON.parse(JSON.stringify(state.annotations || [])),
+    practiceRecords: JSON.parse(JSON.stringify(state.practiceRecords || {})),
+    progress: JSON.parse(JSON.stringify(state.progress || {})),
+    settings: JSON.parse(JSON.stringify(state.settings || {})),
+    activity: JSON.parse(JSON.stringify(state.activity || []))
+  };
+}
+
+function applyCloudState(remoteState) {
+  if (![1, 2, 3, 4, 5].includes(remoteState?.version) || !Array.isArray(remoteState?.books)) {
+    throw new Error("云端数据格式无法识别");
+  }
+  state = mergeCatalog(JSON.parse(JSON.stringify(remoteState)));
+  localStorage.setItem(STORE_KEY, JSON.stringify(state));
+  syncDirty = false;
+  localStorage.removeItem(SYNC_DIRTY_KEY);
+  const first = state.books[0];
+  const current = findContext();
+  reader = {
+    bookId: current.book?.id || first?.id,
+    testId: current.test?.id || first?.tests?.[0]?.id,
+    sectionId: current.section?.id || first?.tests?.[0]?.sections?.[0]?.id,
+    page: 0
+  };
+  practiceFilter.bookId = state.books.some(book => book.id === practiceFilter.bookId) ? practiceFilter.bookId : first?.id;
+  render();
+}
+
+function scheduleCloudSave() {
+  if (!syncClient?.isConfigured() || !syncReady) return;
+  clearTimeout(syncPushTimer);
+  syncPushTimer = setTimeout(() => pushCloudState(), 900);
+}
+
+async function pushCloudState(force = false) {
+  if (!syncClient?.isConfigured() || !syncReady) return false;
+  clearTimeout(syncPushTimer);
+  syncPushTimer = null;
+  try {
+    await syncClient.push(syncedStateSnapshot(), { force });
+    syncDirty = false;
+    localStorage.removeItem(SYNC_DIRTY_KEY);
+    return true;
+  } catch (error) {
+    if (error.code === "conflict" && !force) {
+      const keepLocal = confirm("另一台设备已经更新了云端数据。\n\n选择“确定”会用本机数据覆盖云端；选择“取消”会加载云端版本。");
+      if (keepLocal) return pushCloudState(true);
+      await loadCloudState(true);
+      return false;
+    }
+    toast(`同步失败：${error.message}`);
+    return false;
+  }
+}
+
+async function loadCloudState(announce = true) {
+  if (!syncClient?.isConfigured()) return;
+  clearTimeout(syncPushTimer);
+  syncPushTimer = null;
+  try {
+    const remote = await syncClient.pull();
+    if (remote.state) {
+      applyCloudState(remote.state);
+      if (announce) toast("已加载私有仓库中的最新数据");
+    }
+  } catch (error) {
+    if (announce) toast(`同步失败：${error.message}`);
+  }
+}
+
+async function initializeCloudSync(announce = false) {
+  if (!syncClient?.isConfigured()) return;
+  syncReady = false;
+  try {
+    if (syncDirty) {
+      syncReady = true;
+      const saved = await pushCloudState();
+      if (announce && saved) toast("离线期间的修改已同步");
+      return;
+    }
+    const remote = await syncClient.pull();
+    syncReady = true;
+    if (remote.state) {
+      applyCloudState(remote.state);
+      if (announce) toast("云端数据已加载");
+    } else {
+      const saved = await pushCloudState();
+      if (announce && saved) toast("当前浏览器数据已上传到私有仓库");
+    }
+  } catch (error) {
+    syncReady = true;
+    if (announce) toast(`同步连接失败：${error.message}`);
+  }
+}
+
+async function configureSync(event) {
+  event.preventDefault();
+  const data = new FormData(event.target);
+  try {
+    syncClient.configure(data.get("endpoint"), data.get("syncKey"));
+    await initializeCloudSync(true);
+    render();
+  } catch (error) {
+    toast(`配置失败：${error.message}`);
+  }
+}
+
+function disconnectSync() {
+  if (!confirm("只会断开这台设备，不会删除私有仓库里的数据。确定继续吗？")) return;
+  clearTimeout(syncPushTimer);
+  syncPushTimer = null;
+  syncReady = false;
+  syncDirty = false;
+  localStorage.removeItem(SYNC_DIRTY_KEY);
+  syncClient.disconnect();
+  render();
+}
+
+function syncStatusInfo() {
+  return syncClient?.getStatus() || { kind: "off", message: "未配置云同步", updatedAt: null };
+}
+
+function syncFooter() {
+  const status = syncStatusInfo();
+  const configured = !!syncClient?.isConfigured();
+  return `<span class="sync-line"><i class="sync-dot ${esc(status.kind)}"></i><span data-sync-status>${esc(status.message)}</span></span><br>${configured ? "数据保存在 GitHub 私有仓库" : "当前仅保存在此浏览器"}`;
 }
 
 function esc(value = "") {
@@ -176,7 +321,7 @@ function shell(content, crumb = "学习首页", readerClass = "") {
       <aside class="sidebar" id="sidebar">
         <div class="brand"><div class="brand-mark">聆</div><div><strong>听力精读本</strong><small>Listenfolio</small></div></div>
         <nav class="nav">${navItems.map(([id, icon, label]) => `<button class="nav-btn ${view === id ? "active" : ""}" onclick="go('${id}')"><span class="nav-icon">${icon}</span>${label}</button>`).join("")}</nav>
-        <div class="side-foot">所有学习数据保存在当前浏览器。<br>建议定期导出备份。</div>
+        <div class="side-foot">${syncFooter()}</div>
       </aside>
       <main class="main">
         <header class="topbar">
@@ -513,10 +658,14 @@ function gradeReview(level) {
 }
 
 function settingsView() {
+  const syncConfig = syncClient?.getConfig() || { endpoint: "", hasKey: false };
+  const syncStatus = syncStatusInfo();
+  const syncTime = syncStatus.updatedAt ? new Date(syncStatus.updatedAt).toLocaleString("zh-CN") : "尚未同步";
   return shell(`<div class="content"><section class="hero"><div><div class="eyebrow">Preferences</div><h1>设置与数据</h1><p class="lede">调整阅读体验，并定期把长期积累的学习记录导出备份。</p></div></section>
     <div class="grid settings-grid">
+      <article class="card setting-card sync-card"><div class="setting-title-row"><h2>私有仓库同步</h2><span class="sync-pill ${esc(syncStatus.kind)}"><i class="sync-dot ${esc(syncStatus.kind)}"></i><span data-sync-status>${esc(syncStatus.message)}</span></span></div><p class="lede">无需账户登录。通过同步密钥连接 Worker，数据由 Worker 写入你的 GitHub 私有仓库。</p><form onsubmit="configureSync(event)"><div class="field"><label>Worker 地址</label><input name="endpoint" type="url" class="input" required value="${esc(syncConfig.endpoint)}" placeholder="https://listenfolio-sync.example.workers.dev"></div><div class="field"><label>同步密钥</label><input name="syncKey" type="password" class="input" ${syncConfig.hasKey ? "" : "required"} placeholder="${syncConfig.hasKey ? "已保存；留空表示不修改" : "至少 12 个字符"}" autocomplete="off"></div><div class="sync-meta">最近同步：${esc(syncTime)}</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary">${syncConfig.hasKey ? "更新连接" : "连接并同步"}</button>${syncConfig.hasKey ? `<button type="button" class="btn" onclick="pushCloudState()">立即上传</button><button type="button" class="btn" onclick="loadCloudState()">加载云端</button><button type="button" class="btn danger-text" onclick="disconnectSync()">断开本机</button>` : ""}</div></form></article>
       <article class="card setting-card"><h2>阅读设置</h2><div class="field"><label>Section 显示方式</label><div class="input" style="color:var(--muted)">单页完整显示全部句子</div></div><label style="display:flex;gap:10px;align-items:center;margin:14px 0"><input type="checkbox" ${state.settings.dark?'checked':''} onchange="updateSetting('dark',this.checked)"> 深色阅读模式</label><label style="display:flex;gap:10px;align-items:center"><input type="checkbox" ${state.settings.hideMastered?'checked':''} onchange="updateSetting('hideMastered',this.checked)"> 隐藏已掌握标注</label></article>
-      <article class="card setting-card"><h2>备份与恢复</h2><p class="lede">数据只在当前浏览器中保存。更换设备或清理浏览器前，请先导出 JSON 备份。</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" onclick="exportData()">导出备份</button><label class="btn">导入备份<input type="file" accept="application/json" hidden onchange="importData(this.files[0])"></label></div></article>
+      <article class="card setting-card"><h2>备份与恢复</h2><p class="lede">本地缓存可在断网时继续使用；JSON 备份可用于额外归档或手动迁移。</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" onclick="exportData()">导出备份</button><label class="btn">导入备份<input type="file" accept="application/json" hidden onchange="importData(this.files[0])"></label></div></article>
       <article class="card setting-card"><h2>当前数据</h2><div class="list"><div class="list-row"><span>资料册</span><strong>${state.books.length}</strong></div><div class="list-row"><span>Tests</span><strong>${libraryTestsCount()}</strong></div><div class="list-row"><span>练习次数</span><strong>${Object.values(state.practiceRecords || {}).reduce((sum, item) => sum + (item.attempts?.length || 0), 0)}</strong></div><div class="list-row"><span>标注</span><strong>${state.annotations.length}</strong></div><div class="list-row"><span>复习记录</span><strong>${state.activity.length}</strong></div></div></article>
       <article class="card setting-card"><h2>重置示例</h2><p class="lede">清空当前浏览器内的资料和学习记录，恢复到最初的示例内容。</p><button class="btn" style="color:#a13c2a" onclick="resetData()">重置全部数据</button></article>
     </div>
@@ -627,4 +776,17 @@ function resetData() { if (!confirm("这会清空当前浏览器中的资料、�
 
 document.addEventListener("mousedown", e => { if (!e.target.closest("#selection-menu")) closeSelectionMenu(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && modal) closeModal(); });
+syncClient?.onStatus(status => {
+  document.querySelectorAll("[data-sync-status]").forEach(element => { element.textContent = status.message; });
+  document.querySelectorAll(".sync-dot,.sync-pill").forEach(element => {
+    ["off", "idle", "syncing", "synced", "conflict", "error"].forEach(name => element.classList.remove(name));
+    element.classList.add(status.kind);
+  });
+});
+window.addEventListener("focus", () => {
+  if (!syncReady || syncDirty || !syncClient?.isConfigured() || syncPushTimer || Date.now() - lastFocusSyncAt < 30000) return;
+  lastFocusSyncAt = Date.now();
+  loadCloudState(false);
+});
 render();
+initializeCloudSync(false);

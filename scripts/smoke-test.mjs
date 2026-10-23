@@ -25,6 +25,7 @@ const context = {
 };
 context.window = context;
 context.window.scrollTo = () => {};
+context.window.addEventListener = () => {};
 context.window.LISTENING_LIBRARY = [{
   id: "cambridge_1",
   title: "剑桥雅思 1",
@@ -45,4 +46,6 @@ if (!appElement.innerHTML.includes('name="date"') || !appElement.innerHTML.inclu
 if (!appElement.innerHTML.includes('value="10"') || appElement.innerHTML.includes('name="accuracy"') || appElement.innerHTML.includes('name="wrong"')) throw new Error("Correct/total defaults or legacy fields are incorrect");
 if (!appElement.innerHTML.includes("level-1")) throw new Error("Completed practice was not reflected in contribution map");
 if (appElement.innerHTML.includes("记录下一节") || appElement.innerHTML.includes("保存练习数据")) throw new Error("Legacy practice controls are still visible");
-console.log("Smoke test passed: dashboard and correct/total practice inputs rendered.");
+vm.runInContext("view = 'settings'; render();", context);
+if (!appElement.innerHTML.includes("私有仓库同步") || !appElement.innerHTML.includes("Worker 地址")) throw new Error("Private repository sync settings did not render");
+console.log("Smoke test passed: dashboard, practice inputs and sync settings rendered.");

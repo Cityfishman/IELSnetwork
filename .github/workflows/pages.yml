@@ -26,7 +26,10 @@ jobs:
         with:
           node-version: '22'
       - name: Check website
-        run: node scripts/smoke-test.mjs
+        run: |
+          node scripts/smoke-test.mjs
+          node scripts/sync-client-test.mjs
+          node scripts/sync-worker-test.mjs
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -1,0 +1,9 @@
+name = "listenfolio-sync"
+main = "src/index.mjs"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[vars]
+GITHUB_BRANCH = "main"
+DATA_PATH = "data/listenfolio-state.json"
+ALLOWED_ORIGINS = "https://cityfishman.github.io,http://localhost:4173,http://127.0.0.1:4173"
