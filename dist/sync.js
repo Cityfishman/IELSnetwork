@@ -5,6 +5,12 @@
   const TOKEN_KEY = "listenfolio-github-token-v1";
   const REVISION_KEY = "listenfolio-github-revision-v1";
   const SHA_KEY = "listenfolio-github-file-sha-v1";
+  const DEFAULT_CONFIG = {
+    owner: "Cityfishman",
+    repo: "IELSnetwork-data",
+    branch: "main",
+    path: "data/listenfolio-state.json"
+  };
   const MAX_DOCUMENT_BYTES = 900_000;
   const listeners = new Set();
 
@@ -182,10 +188,10 @@
     hasRepositoryConfig() { return !!config; },
     getConfig() {
       return {
-        owner: config?.owner || "",
-        repo: config?.repo || "",
-        branch: config?.branch || "main",
-        path: config?.path || "data/listenfolio-state.json",
+        owner: config?.owner || DEFAULT_CONFIG.owner,
+        repo: config?.repo || DEFAULT_CONFIG.repo,
+        branch: config?.branch || DEFAULT_CONFIG.branch,
+        path: config?.path || DEFAULT_CONFIG.path,
         hasToken: !!token,
         rememberToken: !!localStorage.getItem(TOKEN_KEY)
       };

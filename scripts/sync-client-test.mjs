@@ -59,6 +59,10 @@ vm.runInContext(fs.readFileSync(new URL("../dist/sync.js", import.meta.url), "ut
 const client = context.ListenfolioSync;
 assert.equal(client.isConfigured(), false);
 assert.equal(client.hasRepositoryConfig(), false);
+assert.equal(client.getConfig().owner, "Cityfishman");
+assert.equal(client.getConfig().repo, "IELSnetwork-data");
+assert.equal(client.getConfig().hasToken, false);
+assert.equal(local.size, 0, "Prefilled repository must not activate sync or change saved data");
 client.configure({
   owner: "Cityfishman",
   repo: "IELSnetwork-data",

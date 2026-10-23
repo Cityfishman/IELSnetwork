@@ -4,11 +4,15 @@
 
 ## 1. 创建私有数据仓库
 
-创建一个空的私有仓库，例如 `IELSnetwork-data`。建议让网站代码与个人数据使用两个不同仓库，不要把数据仓库配置为 GitHub Pages 源。
+当前站点使用的私有仓库为 `Cityfishman/IELSnetwork-data`，默认分支是 `main`。网页已经预填这些信息，不需要重复创建仓库。数据文件由首次连接的浏览器上传，不要提前创建空的学习数据文件。
+
+若以后迁移到其他仓库，请创建一个空的私有仓库。建议让网站代码与个人数据使用两个不同仓库，不要把数据仓库配置为 GitHub Pages 源。
 
 仓库需要存在默认分支。若它是全新的空仓库，请先在 GitHub 中勾选创建 README，或手动完成第一次提交。
 
 ## 2. 创建最小权限 Token
+
+网页“设置”中的“创建同步 Token”会打开 GitHub，并预填所有者、名称、90 天有效期和 Contents 读写权限。仍需手动选择 **Only select repositories → IELSnetwork-data**，再点击 **Generate token**。URL 预填字段参见 [GitHub 官方说明](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#pre-filling-fine-grained-personal-access-token-details-using-url-parameters)。
 
 在 GitHub 的 **Settings → Developer settings → Personal access tokens → Fine-grained tokens** 中创建 Token：
 
@@ -31,6 +35,7 @@ Token 只会显示一次，请妥善保存；不要将它写入仓库文件、Is
 
 首次连接时：
 
+- 首先在已有学习记录的设备上连接；其他设备随后使用相同仓库配置和有效 Token 连接。
 - 如果数据文件不存在，当前浏览器数据会创建为第一次 Git 提交。
 - 如果数据文件已经存在，网页会优先加载仓库版本。
 - 后续修改会在约一秒后自动提交。
